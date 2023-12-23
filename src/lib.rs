@@ -3,6 +3,8 @@ use nalgebra::{Const, OMatrix, RealField, SVector, Vector1};
 #[cfg(test)]
 pub(crate) mod csv;
 pub mod linalg;
+pub mod newton;
+pub mod ode;
 
 pub trait IntoVector<T: RealField + Copy, const D: usize>: Clone {
     fn into_vector(self) -> SVector<T, D>;
