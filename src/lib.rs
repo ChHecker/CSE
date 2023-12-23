@@ -1,5 +1,7 @@
 use nalgebra::{Const, OMatrix, RealField, SVector, Vector1};
 
+#[cfg(test)]
+pub(crate) mod csv;
 pub mod linalg;
 
 pub trait IntoVector<T: RealField + Copy, const D: usize>: Clone {
