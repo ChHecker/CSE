@@ -1,6 +1,7 @@
 use nalgebra::{Const, OMatrix, RealField, SVector, Vector1};
 
 pub mod barnes_hut;
+pub mod containers;
 #[cfg(test)]
 pub(crate) mod csv;
 pub mod interpolation;
