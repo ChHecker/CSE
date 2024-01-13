@@ -94,6 +94,7 @@ impl Interpolation for BarycentricLagrange {
             .filter(|&&xi| xi != x_near)
             .map(|xi| x - xi)
             .product();
+
         let sum: f64 = self
             .x
             .iter()
@@ -161,7 +162,6 @@ impl Newton {
                 let k = i + order;
                 f[i] = (f[i + 1] - f[i]) / (self.x[k] - self.x[i]);
             }
-            dbg!(&f);
             self.f_last_row[order] = f[n - order - 1];
             self.f_diag[order] = f[0];
         }
@@ -405,7 +405,6 @@ mod tests {
         let x: Vec<f64> = (0..=d)
             .map(|i| upper as f64 * i as f64 / d as f64)
             .collect();
-        dbg!(x.last());
         let y: Vec<f64> = x.iter().map(|xi| xi.cos()).collect();
 
         let bl = CubicSpline::new(x, y, 0., -(upper as f64).sin());
