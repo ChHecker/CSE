@@ -8,7 +8,6 @@ edition = "2021"
 
 [dependencies]
 nalgebra = "0.32.3"
-rayon = "1.8.0"
 
 [dev-dependencies]
 approx = "0.5.1"
@@ -23,6 +22,3 @@ debug = true
 [[bench]]
 name = "benchmark"
 harness = false
-
-[[example]]
-name = "barnes_hut"
