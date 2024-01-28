@@ -1,8 +1,11 @@
-use criterion::{black_box, criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
+use std::thread;
+use std::time::Duration;
+
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use cse::interpolation::{AitkenNeville, BarycentricLagrange, CubicSpline, Interpolation, Newton};
 use cse::linalg::{Lu, Qr};
-use nalgebra::{DVector, SMatrix, SVector, Vector3};
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use cse::quadrature::{adapative_trapezoidal, composite_trapezoidal, romberg, simpson};
+use nalgebra::{DVector, SMatrix, SVector};
 
 fn linalg_benchmark(c: &mut Criterion) {
     let a: SMatrix<f64, 100, 100> = SMatrix::new_random();
@@ -73,5 +76,71 @@ fn interpolation_benchmark(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, linalg_benchmark, interpolation_benchmark,);
+fn f(x: f64, sleep_micros: u64) -> f64 {
+    thread::sleep(Duration::from_micros(sleep_micros));
+    x.exp()
+}
+
+fn quadrature_benchmark(c: &mut Criterion) {
+    let err = 1e-8;
+    let f_test = |x| f(x, 0);
+    let exact = 1f64.exp() - 1.;
+
+    let mut n_ct = 10;
+    let mut int_t = composite_trapezoidal(f_test, 0., 1., n_ct);
+    while (int_t - exact).abs() > err {
+        n_ct *= 2;
+        int_t = composite_trapezoidal(f_test, 0., 1., n_ct);
+    }
+    dbg!(n_ct);
+
+    let mut n_s = 10;
+    let mut int_s = simpson(f_test, 0., 1., n_s);
+    while (int_s - exact).abs() > err {
+        n_s *= 2;
+        int_s = simpson(f_test, 0., 1., n_s);
+    }
+    dbg!(n_s);
+
+    let mut err_at = err;
+    let mut int_at = adapative_trapezoidal(f_test, 0., 1., err_at);
+    while (int_at - exact).abs() > err {
+        err_at /= 2.;
+        int_at = adapative_trapezoidal(f_test, 0., 1., err_at);
+    }
+    dbg!(err_at);
+
+    let mut err_rom = err;
+    let mut int_rom = romberg(f_test, 0., 1., err_rom);
+    while (int_rom - exact).abs() > err {
+        err_rom /= 2.;
+        int_rom = romberg(f_test, 0., 1., err_rom);
+    }
+    dbg!(err_rom);
+
+    let mut group = c.benchmark_group("quadrature");
+    for sleep in [0, 5, 10] {
+        let f = |x| f(x, sleep);
+
+        group.bench_function(BenchmarkId::new("composite trapezoidal", sleep), |b| {
+            b.iter(|| composite_trapezoidal(f, 0., 1., n_ct))
+        });
+        group.bench_function(BenchmarkId::new("simpson", sleep), |b| {
+            b.iter(|| simpson(f, 0., 1., n_s))
+        });
+        group.bench_function(BenchmarkId::new("adaptive trapezoidal", sleep), |b| {
+            b.iter(|| adapative_trapezoidal(f, 0., 1., err_at))
+        });
+        group.bench_function(BenchmarkId::new("romberg", sleep), |b| {
+            b.iter(|| romberg(f, 0., 1., err_at))
+        });
+    }
+}
+
+criterion_group!(
+    benches,
+    linalg_benchmark,
+    interpolation_benchmark,
+    quadrature_benchmark
+);
 criterion_main!(benches);
