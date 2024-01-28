@@ -56,51 +56,62 @@ pub fn adapative_trapezoidal(f: impl Fn(f64) -> f64, a: f64, b: f64, err: f64) -
     let mut integrals: Data = values.windows(2).map(|f| h / 2. * (f[1] - f[0])).collect();
     integrals.reserve(1000);
 
+    let mut at = AdaptiveTrapezoidal {
+        values,
+        integrals,
+        f,
+        a,
+        err,
+        h,
+    };
+
     // iterate through intervals
     for i in 0..n {
-        subdivide_trapezoidal(i, 0, &mut values, &mut integrals, h, &f, a, 10. * err);
+        at.subdivide_trapezoidal(i, 0);
     }
 
-    integrals.into_iter().sum()
+    at.integrals.into_iter().sum()
 }
 
-fn subdivide_trapezoidal(
-    index: usize,
-    depth: usize,
-    values: &mut Data,
-    integrals: &mut Data,
-    h: f64,
-    f: &impl Fn(f64) -> f64,
+struct AdaptiveTrapezoidal<F: Fn(f64) -> f64> {
+    values: Data,
+    integrals: Data,
+    f: F,
     a: f64,
     err: f64,
-) {
-    let (_, x_middle) = x_lm(index, depth, h, a);
-    let (index_middle, index_right) = index_mr(index, depth);
+    h: f64,
+}
 
-    // get current depth value and integral
-    let int = integrals[index];
-    let y_left = values[index];
-    let y_middle = f(x_middle);
-    if values.len() <= index_middle {
-        values.resize(2 * values.len(), 0.);
-    }
-    values[index_middle] = y_middle;
-    let y_right = values[index_right];
+impl<F: Fn(f64) -> f64> AdaptiveTrapezoidal<F> {
+    fn subdivide_trapezoidal(&mut self, index: usize, depth: usize) {
+        let (_, x_middle) = x_lm(index, depth, self.h, self.a);
+        let (index_middle, index_right) = index_mr(index, depth);
 
-    let weight = h / 2f64.powi(depth as i32 + 2);
-    let int_left = weight * (y_left + y_middle);
-    let int_right = weight * (y_middle + y_right);
-    let err_ref = (int_left + int_right - int).abs();
+        // get current depth value and integral
+        let int = self.integrals[index];
+        let y_left = self.values[index];
+        let y_middle = (self.f)(x_middle);
+        if self.values.len() <= index_middle {
+            self.values.resize(2 * self.values.len(), 0.);
+        }
+        self.values[index_middle] = y_middle;
+        let y_right = self.values[index_right];
 
-    if integrals.len() <= index || integrals.len() <= index_middle {
-        integrals.resize(2 * integrals.len() + 1, 0.);
-    }
-    integrals[index] = int_left;
-    integrals[index_middle] = int_right;
+        let weight = self.h / 2f64.powi(depth as i32 + 2);
+        let int_left = weight * (y_left + y_middle);
+        let int_right = weight * (y_middle + y_right);
+        let err_ref = (int_left + int_right - int).abs();
 
-    if err_ref > err / 2f64.powi(depth as i32 + 1) {
-        subdivide_trapezoidal(index, depth + 1, values, integrals, h, f, a, err);
-        subdivide_trapezoidal(index_middle, depth + 1, values, integrals, h, f, a, err);
+        if self.integrals.len() <= index || self.integrals.len() <= index_middle {
+            self.integrals.resize(2 * self.integrals.len() + 1, 0.);
+        }
+        self.integrals[index] = int_left;
+        self.integrals[index_middle] = int_right;
+
+        if err_ref > self.err / 2f64.powi(depth as i32 + 1) {
+            self.subdivide_trapezoidal(index, depth + 1);
+            self.subdivide_trapezoidal(index_middle, depth + 1);
+        }
     }
 }
 
