@@ -40,7 +40,6 @@ pub trait Interpolation {
     fn interpolate(&self, x: f64) -> f64;
 }
 
-#[derive(Clone, Debug)]
 pub struct BarycentricLagrange {
     w: Vec<f64>,
     x: Vec<f64>,
@@ -112,7 +111,7 @@ impl Interpolation for BarycentricLagrange {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct AitkenNeville {
     x: Vec<f64>,
     y: Vec<f64>,
