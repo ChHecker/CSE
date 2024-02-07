@@ -3,12 +3,12 @@ use nalgebra::{Const, OMatrix, RealField, SVector, Vector1};
 pub mod containers;
 #[cfg(test)]
 pub(crate) mod csv;
-pub mod eigen;
 pub mod fft;
 pub mod interpolation;
 pub mod linalg;
 pub mod newton;
 pub mod ode;
+pub mod parser;
 pub mod quadrature;
 
 pub trait IntoVector<T: RealField + Copy, const D: usize>: Clone {

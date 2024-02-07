@@ -1,4 +1,4 @@
-use nalgebra::{allocator::Allocator, Const, DefaultAllocator, OMatrix, OVector, SVector};
+use nalgebra::{allocator::Allocator, Const, DefaultAllocator, Dim, OMatrix, OVector};
 
 /* L x = b
  *
@@ -6,12 +6,14 @@ use nalgebra::{allocator::Allocator, Const, DefaultAllocator, OMatrix, OVector, 
  * x 1 0
  * x x 1
  */
-fn forward_substitution<const D: usize>(
-    l: &OMatrix<f64, Const<D>, Const<D>>,
-    b: OVector<f64, Const<D>>,
-) -> OVector<f64, Const<D>> {
+fn forward_substitution<D: Dim>(l: &OMatrix<f64, D, D>, b: OVector<f64, D>) -> OVector<f64, D>
+where
+    DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>,
+{
+    let n = l.shape().0;
+
     let mut x = b;
-    for i in 0..D {
+    for i in 0..n {
         for j in 0..i {
             x[i] -= l[(i, j)] * x[j];
         }
@@ -26,16 +28,18 @@ fn forward_substitution<const D: usize>(
  * 0 x x
  * 0 0 x
  */
-fn backward_substitution<const D: usize>(
-    u: &OMatrix<f64, Const<D>, Const<D>>,
-    b: OVector<f64, Const<D>>,
-) -> Option<OVector<f64, Const<D>>>
+fn backward_substitution<D: Dim>(
+    u: &OMatrix<f64, D, D>,
+    b: OVector<f64, D>,
+) -> Option<OVector<f64, D>>
 where
-    DefaultAllocator: Allocator<f64, Const<D>, Const<D>> + Allocator<f64, Const<D>, Const<1>>,
+    DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D, Const<1>>,
 {
-    let mut x: OVector<f64, Const<D>> = b;
-    for i in (0..D).rev() {
-        for j in i + 1..D {
+    let n = u.shape().0;
+
+    let mut x: OVector<f64, D> = b;
+    for i in (0..n).rev() {
+        for j in i + 1..n {
             x[i] -= u[(i, j)] * x[j];
         }
         if u[(i, i)].abs() < 1e-16 {
@@ -48,23 +52,29 @@ where
 }
 
 #[derive(Clone, Debug)]
-pub struct Lu<const D: usize>
+pub struct Lu<D: Dim>
 where
-    nalgebra::DefaultAllocator: nalgebra::allocator::Allocator<f64, Const<D>, Const<D>>,
+    DefaultAllocator:
+        Allocator<f64, D, D> + Allocator<f64, D, Const<1>> + Allocator<f64, Const<1>, D>,
 {
-    pub l: OMatrix<f64, Const<D>, Const<D>>,
-    pub u: OMatrix<f64, Const<D>, Const<D>>,
+    pub l: OMatrix<f64, D, D>,
+    pub u: OMatrix<f64, D, D>,
 }
 
-impl<const D: usize> Lu<D>
+impl<D: Dim> Lu<D>
 where
-    DefaultAllocator: Allocator<f64, Const<D>, Const<D>> + Allocator<f64, Const<D>, Const<1>>,
+    DefaultAllocator:
+        Allocator<f64, D, D> + Allocator<f64, D, Const<1>> + Allocator<f64, Const<1>, D>,
 {
-    pub fn new(a: OMatrix<f64, Const<D>, Const<D>>) -> Option<Self> {
-        let mut l = OMatrix::<f64, Const<D>, Const<D>>::identity();
+    pub fn new(a: OMatrix<f64, D, D>) -> Option<Self> {
+        assert!(a.shape().0 == a.shape().1);
+        let n = a.shape().0;
+        let n_gen = a.shape_generic().0;
+
+        let mut l = OMatrix::<f64, D, D>::identity_generic(n_gen, n_gen);
         let mut u = a;
 
-        for i in 0..D {
+        for i in 0..n {
             let current_row = u.row(i).clone_owned();
             let pivot_element = current_row[i];
 
@@ -74,7 +84,7 @@ where
                 }
                 let factor = row[i] / pivot_element;
                 l[(j, i)] = factor;
-                row -= factor * current_row;
+                row -= factor * &current_row;
             }
         }
 
@@ -82,48 +92,54 @@ where
     }
 
     /// Solve the equation $LUx = b$.
-    pub fn solve(&self, b: &OVector<f64, Const<D>>) -> Option<OVector<f64, Const<D>>> {
+    pub fn solve(&self, b: &OVector<f64, D>) -> Option<OVector<f64, D>> {
         let y = forward_substitution(&self.l, b.clone());
         backward_substitution(&self.u, y.clone())
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct Qr<const D: usize>
+pub struct Qr<D: Dim>
 where
-    nalgebra::DefaultAllocator: nalgebra::allocator::Allocator<f64, Const<D>, Const<D>>,
+    DefaultAllocator:
+        Allocator<f64, D, D> + Allocator<f64, D, Const<1>> + Allocator<f64, Const<1>, D>,
 {
-    pub q: OMatrix<f64, Const<D>, Const<D>>,
-    pub r: OMatrix<f64, Const<D>, Const<D>>,
+    pub q: OMatrix<f64, D, D>,
+    pub r: OMatrix<f64, D, D>,
 }
 
-impl<const D: usize> Qr<D>
+impl<D: Dim> Qr<D>
 where
-    DefaultAllocator: Allocator<f64, Const<D>, Const<D>> + Allocator<f64, Const<1>, Const<D>>,
+    DefaultAllocator:
+        Allocator<f64, D, D> + Allocator<f64, D, Const<1>> + Allocator<f64, Const<1>, D>,
 {
-    pub fn new(a: OMatrix<f64, Const<D>, Const<D>>) -> Self {
-        let mut q = OMatrix::<f64, Const<D>, Const<D>>::identity();
+    pub fn new(a: OMatrix<f64, D, D>) -> Self {
+        assert!(a.shape().0 == a.shape().1);
+        let n = a.shape().0;
+        let n_gen = a.shape_generic().0;
+
+        let mut q = OMatrix::<f64, D, D>::identity_generic(n_gen, n_gen);
         let mut r = a;
 
-        for i in 0..D {
-            let r_view = r.view((i, i), (D - i, D - i));
+        for i in 0..n {
+            let r_view = r.view((i, i), (n - i, n - i));
             let col_view = r_view.column(0);
-            let mut goal = SVector::<f64, D>::zeros();
+            let mut goal = OVector::<f64, D>::zeros_generic(n_gen, Const);
             goal[i] = col_view.norm();
-            let mut v = SVector::<f64, D>::zeros();
-            v.view_mut((i, 0), (D - i, 1)).copy_from(
-                &(col_view + col_view[0].signum() * goal.view((i, 0), (D - i, 1))).normalize(),
+            let mut v = OVector::<f64, D>::zeros_generic(n_gen, Const);
+            v.view_mut((i, 0), (n - i, 1)).copy_from(
+                &(col_view + col_view[0].signum() * goal.view((i, 0), (n - i, 1))).normalize(),
             );
 
             r -= 2. * &v * (v.transpose() * &r);
-            q -= 2. * (&q * v) * v.transpose();
+            q -= 2. * (&q * &v) * v.transpose();
         }
 
         Self { q, r }
     }
 
     /// Solve the equation $QRx = b$.
-    pub fn solve(&self, b: &OVector<f64, Const<D>>) -> Option<OVector<f64, Const<D>>> {
+    pub fn solve(&self, b: &OVector<f64, D>) -> Option<OVector<f64, D>> {
         backward_substitution(&self.r, self.q.transpose() * b)
     }
 }

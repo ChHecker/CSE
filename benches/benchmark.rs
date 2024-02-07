@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use cse::interpolation::{AitkenNeville, BarycentricLagrange, CubicSpline, Interpolation, Newton};
-use cse::linalg::{Lu, Qr};
+use cse::linalg::solve::{Lu, Qr};
 use cse::quadrature::{adapative_trapezoidal, composite_trapezoidal, romberg, simpson};
 use nalgebra::{DVector, SMatrix, SVector};
 

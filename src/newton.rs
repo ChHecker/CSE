@@ -2,7 +2,7 @@ use nalgebra::{
     allocator::Allocator, ArrayStorage, Const, DefaultAllocator, DimMin, DimMinimum, ToTypenum,
 };
 
-use crate::{linalg::Lu, IntoMatrix, IntoVector};
+use crate::{linalg::solve::Lu, IntoMatrix, IntoVector};
 
 pub enum NewtonResult<V> {
     Converged(V),
