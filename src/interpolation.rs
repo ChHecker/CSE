@@ -142,7 +142,6 @@ impl Interpolation for AitkenNeville {
     }
 }
 
-// TODO: Diverges for Chebychev and many points
 #[derive(Clone, Debug)]
 pub struct Newton {
     f_diag: Vec<f64>,
@@ -198,7 +197,7 @@ impl Interpolation for Newton {
 
     fn interpolate(&self, x: f64) -> f64 {
         let mut f = self.f_diag[self.x.len() - 1];
-        for (xi, fi) in self.x.iter().zip(self.f_diag.iter()).rev() {
+        for (xi, fi) in self.x.iter().zip(self.f_diag.iter()).rev().skip(1) {
             f = f * (x - xi) + fi;
         }
 
@@ -416,5 +415,16 @@ mod tests {
         for (xi, yi) in x.into_iter().zip(y) {
             assert_abs_diff_eq!(yi, xi.cos(), epsilon = 0.1);
         }
+    }
+
+    #[test]
+    fn test_newton_exam() {
+        let x = vec![-1., 0., 2.];
+        let y = vec![8., -4., 2.];
+        let ne = Newton::new(x, y);
+        dbg!(&ne.f_diag);
+        dbg!(&ne.f_last_row);
+        dbg!(ne.interpolate(0.));
+        dbg!(ne.interpolate(1.));
     }
 }
