@@ -1,12 +1,12 @@
 use std::ops::{Index, IndexMut};
 
 #[derive(Clone, Debug)]
-pub struct BinarySearchTree<K: Ord, V> {
+pub struct SortedBinaryTree<K: Ord, V> {
     root: Option<Box<Node<K, V>>>,
     len: usize,
 }
 
-impl<K: Ord, V> BinarySearchTree<K, V> {
+impl<K: Ord, V> SortedBinaryTree<K, V> {
     pub fn new() -> Self {
         Default::default()
     }
@@ -42,13 +42,13 @@ impl<K: Ord, V> BinarySearchTree<K, V> {
     }
 }
 
-impl<K: Ord, V> Default for BinarySearchTree<K, V> {
+impl<K: Ord, V> Default for SortedBinaryTree<K, V> {
     fn default() -> Self {
         Self { root: None, len: 0 }
     }
 }
 
-impl<K: Ord, V> Index<&K> for BinarySearchTree<K, V> {
+impl<K: Ord, V> Index<&K> for SortedBinaryTree<K, V> {
     type Output = V;
 
     fn index(&self, index: &K) -> &Self::Output {
@@ -56,7 +56,7 @@ impl<K: Ord, V> Index<&K> for BinarySearchTree<K, V> {
     }
 }
 
-impl<K: Ord, V> IndexMut<&K> for BinarySearchTree<K, V> {
+impl<K: Ord, V> IndexMut<&K> for SortedBinaryTree<K, V> {
     fn index_mut(&mut self, index: &K) -> &mut Self::Output {
         self.get_mut(index).expect("key not in tree")
     }
@@ -166,7 +166,7 @@ mod tests {
 
     #[test]
     fn insert() {
-        let mut ll = BinarySearchTree::new();
+        let mut ll = SortedBinaryTree::new();
         ll.insert(2, 2);
         ll.insert(1, 1);
         ll.insert(3, 3);
@@ -182,7 +182,7 @@ mod tests {
 
     #[test]
     fn remove() {
-        let mut ll = BinarySearchTree::new();
+        let mut ll = SortedBinaryTree::new();
         ll.insert(2, 2);
         ll.insert(1, 1);
         ll.insert(3, 3);
