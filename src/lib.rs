@@ -10,6 +10,7 @@ pub mod newton;
 pub mod ode;
 pub mod parser;
 pub mod quadrature;
+pub mod sorting;
 
 pub trait IntoVector<T: RealField + Copy, const D: usize>: Clone {
     fn into_vector(self) -> SVector<T, D>;

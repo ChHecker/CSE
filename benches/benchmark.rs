@@ -5,6 +5,7 @@ use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criteri
 use cse::interpolation::{AitkenNeville, BarycentricLagrange, CubicSpline, Interpolation, Newton};
 use cse::linalg::solve::{Lu, Qr};
 use cse::quadrature::{adapative_trapezoidal, composite_trapezoidal, romberg, simpson};
+use cse::sorting::{merge_sort, quick_sort, selection_sort};
 use nalgebra::{DVector, SMatrix, SVector};
 
 fn linalg_benchmark(c: &mut Criterion) {
@@ -92,7 +93,6 @@ fn quadrature_benchmark(c: &mut Criterion) {
         n_ct *= 2;
         int_t = composite_trapezoidal(f_test, 0., 1., n_ct);
     }
-    dbg!(n_ct);
 
     let mut n_s = 10;
     let mut int_s = simpson(f_test, 0., 1., n_s);
@@ -100,7 +100,6 @@ fn quadrature_benchmark(c: &mut Criterion) {
         n_s *= 2;
         int_s = simpson(f_test, 0., 1., n_s);
     }
-    dbg!(n_s);
 
     let mut err_at = err;
     let mut int_at = adapative_trapezoidal(f_test, 0., 1., err_at);
@@ -108,7 +107,6 @@ fn quadrature_benchmark(c: &mut Criterion) {
         err_at /= 2.;
         int_at = adapative_trapezoidal(f_test, 0., 1., err_at);
     }
-    dbg!(err_at);
 
     let mut err_rom = err;
     let mut int_rom = romberg(f_test, 0., 1., err_rom);
@@ -116,7 +114,6 @@ fn quadrature_benchmark(c: &mut Criterion) {
         err_rom /= 2.;
         int_rom = romberg(f_test, 0., 1., err_rom);
     }
-    dbg!(err_rom);
 
     let mut group = c.benchmark_group("quadrature");
     for sleep in [0, 5, 10] {
@@ -137,10 +134,28 @@ fn quadrature_benchmark(c: &mut Criterion) {
     }
 }
 
+fn sort_benchmark(c: &mut Criterion) {
+    let mut group = c.benchmark_group("sort");
+    for n in [100, 1_000, 10_000] {
+        let arr: DVector<usize> = DVector::new_random(n);
+
+        group.bench_function(BenchmarkId::new("selection", n), |b| {
+            b.iter(|| selection_sort(arr.clone().as_mut_slice()))
+        });
+        group.bench_function(BenchmarkId::new("merge", n), |b| {
+            b.iter(|| merge_sort(arr.clone().as_mut_slice()))
+        });
+        group.bench_function(BenchmarkId::new("quick", n), |b| {
+            b.iter(|| quick_sort(arr.clone().as_mut_slice()))
+        });
+    }
+}
+
 criterion_group!(
     benches,
     linalg_benchmark,
     interpolation_benchmark,
-    quadrature_benchmark
+    quadrature_benchmark,
+    sort_benchmark
 );
 criterion_main!(benches);
