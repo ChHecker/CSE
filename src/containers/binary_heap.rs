@@ -1,12 +1,12 @@
 use std::fmt::{Debug, Display};
 
 #[derive(Clone, Debug)]
-pub struct BinaryHeap<P: Ord, V> {
-    root: Option<Box<Node<P, V>>>,
+pub struct BinaryHeap<V, P: Ord> {
+    root: Option<Box<Node<V, P>>>,
     len: usize,
 }
 
-impl<P: Ord, V> BinaryHeap<P, V> {
+impl<V, P: Ord> BinaryHeap<V, P> {
     pub fn new(vals: impl IntoIterator<Item = (V, P)>) -> Self {
         let mut ret = Self::default();
         for (val, prio) in vals {
@@ -105,13 +105,13 @@ impl<P: Ord, V> BinaryHeap<P, V> {
     }
 }
 
-impl<P: Ord, V> Default for BinaryHeap<P, V> {
+impl<V, P: Ord> Default for BinaryHeap<V, P> {
     fn default() -> Self {
         Self { root: None, len: 0 }
     }
 }
 
-impl<P: Ord, V: Display> Display for BinaryHeap<P, V> {
+impl<P: Ord, V: Display> Display for BinaryHeap<V, P> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(root) = &self.root {
             root.fmt(f)
@@ -122,14 +122,14 @@ impl<P: Ord, V: Display> Display for BinaryHeap<P, V> {
 }
 
 #[derive(Clone, Debug)]
-struct Node<P: Ord, V> {
+struct Node<V, P: Ord> {
     priority: P,
     value: V,
-    left: Option<Box<Node<P, V>>>,
-    right: Option<Box<Node<P, V>>>,
+    left: Option<Box<Node<V, P>>>,
+    right: Option<Box<Node<V, P>>>,
 }
 
-impl<P: Ord, V> Node<P, V> {
+impl<V, P: Ord> Node<V, P> {
     fn new(value: V, priority: P) -> Self {
         Self {
             priority,
@@ -274,7 +274,7 @@ impl<P: Ord, V> Node<P, V> {
     }
 
     #[allow(clippy::collapsible_else_if)]
-    fn pop(&mut self, target_node: usize, current_height: usize) -> Box<Node<P, V>> {
+    fn pop(&mut self, target_node: usize, current_height: usize) -> Box<Node<V, P>> {
         let (recurse, left) = self.recursion_step(target_node, current_height);
         // Haven't reached next to last level
         if recurse {
@@ -304,7 +304,7 @@ impl<P: Ord, V> Node<P, V> {
     }
 }
 
-impl<P: Ord, V: Display> Display for Node<P, V> {
+impl<P: Ord, V: Display> Display for Node<V, P> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(right) = &self.right {
             right.fmt(f)?;
@@ -326,7 +326,7 @@ mod tests {
 
     use super::*;
 
-    impl<P: Debug + Ord, V> Node<P, V> {
+    impl<P: Debug + Ord, V> Node<V, P> {
         fn assert_order(&self) {
             if let Some(left) = &self.left {
                 assert!(
@@ -349,7 +349,7 @@ mod tests {
         }
     }
 
-    impl<P: Clone + Ord, V: Clone + Display> TreeItem for Node<P, V> {
+    impl<P: Clone + Ord, V: Clone + Display> TreeItem for Node<V, P> {
         type Child = Self;
 
         fn write_self<W: std::io::Write>(
