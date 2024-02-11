@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 /// A weighted, directed graph.
 #[derive(Clone, Debug)]
@@ -73,6 +73,9 @@ impl<W> Graph<W> {
     pub fn insert_edge(&mut self, nodes: (usize, usize), weight: W) -> bool {
         let (node, neighbor) = nodes;
 
+        assert!(node < self.num_nodes());
+        assert!(neighbor < self.num_nodes());
+
         // Check if edge already in graph
         if self.search_hash.contains_key(&nodes) {
             return false;
@@ -109,6 +112,43 @@ impl<W> Graph<W> {
         let idx = self.search_hash.get(&edge)?;
         Some(&self.neighbors[edge.0][*idx].1)
     }
+
+    pub fn breadth_first_search(&self, start: usize) -> Vec<usize> {
+        let mut out = vec![];
+
+        let mut queue = VecDeque::new();
+        queue.push_back(start);
+
+        while let Some(u) = queue.pop_front() {
+            for (v, _) in self.neighbors(u) {
+                if !out.contains(v) {
+                    queue.push_back(*v);
+                    out.push(*v);
+                }
+            }
+        }
+
+        out
+    }
+
+    fn dfs_recursion(&self, node: usize, visited: &mut [bool], out: &mut Vec<usize>) {
+        for (v, _) in self.neighbors(node) {
+            if !visited[*v] {
+                visited[*v] = true;
+                self.dfs_recursion(*v, visited, out);
+                out.push(*v);
+            }
+        }
+    }
+
+    pub fn depth_first_search(&self, start: usize) -> Vec<usize> {
+        let mut out = vec![];
+        let mut visited = vec![false; self.num_nodes()];
+
+        self.dfs_recursion(start, &mut visited, &mut out);
+
+        out
+    }
 }
 
 impl<T> Default for Graph<T> {
@@ -132,8 +172,8 @@ mod tests {
             assert_eq!(graph.insert_node(), i);
         }
 
-        let neighbors = [(0, 1), (0, 2), (1, 2), (3, 4), (4, 2)];
-        for (i, n) in neighbors.into_iter().enumerate() {
+        let edges = [(0, 1), (0, 2), (1, 2), (3, 4), (4, 2)];
+        for (i, n) in edges.into_iter().enumerate() {
             graph.insert_edge(n, i);
         }
 
@@ -143,7 +183,7 @@ mod tests {
         assert_eq!(graph.neighbors[3], vec![(4, 3)]);
         assert_eq!(graph.neighbors[4], vec![(2, 4)]);
 
-        for n in &neighbors {
+        for n in &edges {
             assert!(graph.search_hash.contains_key(n))
         }
 
@@ -154,5 +194,44 @@ mod tests {
         assert_eq!(graph.neighbors[2], vec![(3, 3)]);
         assert_eq!(graph.neighbors[3], vec![(1, 4)]);
         assert!(graph.search_hash.contains_key(&(0, 1)));
+    }
+
+    #[test]
+    fn breadth_first_search() {
+        let mut graph = Graph::new();
+        for _ in 0..7 {
+            graph.insert_node();
+        }
+
+        let edges = [(3, 1), (3, 5), (1, 0), (1, 2), (5, 4), (5, 6)];
+        for edge in edges.iter() {
+            graph.insert_edge(*edge, 1);
+        }
+
+        let bfs = graph.breadth_first_search(3);
+        for (i, (_, j)) in bfs.into_iter().zip(edges) {
+            assert_eq!(i, j);
+        }
+    }
+
+    #[test]
+    fn depth_first_search() {
+        let mut graph = Graph::new();
+        for _ in 0..7 {
+            graph.insert_node();
+        }
+
+        let edges = [(3, 1), (3, 5), (1, 0), (1, 2), (5, 4), (5, 6)];
+        for edge in edges.iter() {
+            graph.insert_edge(*edge, 1);
+        }
+
+        let dfs = graph.depth_first_search(3);
+        assert_eq!(dfs[0], 0);
+        assert_eq!(dfs[1], 2);
+        assert_eq!(dfs[2], 1);
+        assert_eq!(dfs[3], 4);
+        assert_eq!(dfs[4], 6);
+        assert_eq!(dfs[5], 5);
     }
 }
