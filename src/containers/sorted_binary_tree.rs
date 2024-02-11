@@ -28,17 +28,29 @@ impl<K: Ord, V> SortedBinaryTree<K, V> {
     }
 
     pub fn insert(&mut self, key: K, value: V) -> Option<V> {
-        match &mut self.root {
+        let old_value = match &mut self.root {
             Some(root) => root.insert(key, value),
             None => {
                 self.root = Some(Box::new(Node::new(key, value)));
                 None
             }
+        };
+
+        if old_value.is_none() {
+            self.len += 1;
         }
+
+        old_value
     }
 
     pub fn remove(&mut self, key: &K) -> Option<V> {
-        Node::remove(&mut self.root, key)
+        let value = Node::remove(&mut self.root, key);
+
+        if value.is_some() {
+            self.len -= 1;
+        }
+
+        value
     }
 }
 

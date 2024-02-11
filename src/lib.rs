@@ -4,6 +4,7 @@ pub mod containers;
 #[cfg(test)]
 pub(crate) mod csv;
 pub mod fft;
+pub mod graphs;
 pub mod interpolation;
 pub mod linalg;
 pub mod newton;
