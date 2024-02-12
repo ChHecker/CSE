@@ -52,6 +52,14 @@ impl<K: Ord, V> SortedBinaryTree<K, V> {
 
         value
     }
+
+    pub fn contains(&self, key: &K) -> bool {
+        if let Some(root) = &self.root {
+            root.contains(key)
+        } else {
+            false
+        }
+    }
 }
 
 impl<K: Ord, V> Default for SortedBinaryTree<K, V> {
@@ -71,6 +79,47 @@ impl<K: Ord, V> Index<&K> for SortedBinaryTree<K, V> {
 impl<K: Ord, V> IndexMut<&K> for SortedBinaryTree<K, V> {
     fn index_mut(&mut self, index: &K) -> &mut Self::Output {
         self.get_mut(index).expect("key not in tree")
+    }
+}
+
+impl<K: Ord, V, const N: usize> From<[(K, V); N]> for SortedBinaryTree<K, V> {
+    fn from(value: [(K, V); N]) -> Self {
+        Self::from_iter(value)
+    }
+}
+
+impl<K: Ord, V> From<Vec<(K, V)>> for SortedBinaryTree<K, V> {
+    fn from(value: Vec<(K, V)>) -> Self {
+        Self::from_iter(value)
+    }
+}
+
+impl<K: Clone + Ord, const N: usize> From<[K; N]> for SortedBinaryTree<K, K> {
+    fn from(value: [K; N]) -> Self {
+        Self::from_iter(value)
+    }
+}
+
+impl<K: Clone + Ord> From<Vec<K>> for SortedBinaryTree<K, K> {
+    fn from(value: Vec<K>) -> Self {
+        Self::from_iter(value)
+    }
+}
+
+impl<K: Ord, V> FromIterator<(K, V)> for SortedBinaryTree<K, V> {
+    fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
+        let mut ret = Self::default();
+        for (key, val) in iter {
+            ret.insert(key, val);
+        }
+
+        ret
+    }
+}
+
+impl<K: Clone + Ord> FromIterator<K> for SortedBinaryTree<K, K> {
+    fn from_iter<T: IntoIterator<Item = K>>(iter: T) -> Self {
+        Self::from_iter(iter.into_iter().map(|p| (p.clone(), p)))
     }
 }
 
@@ -170,6 +219,20 @@ impl<K: Ord, V> Node<K, V> {
             std::cmp::Ordering::Greater => Self::remove(&mut node.as_mut()?.right, key),
         }
     }
+
+    fn contains(&self, key: &K) -> bool {
+        match key.cmp(&self.key) {
+            std::cmp::Ordering::Equal => true,
+            std::cmp::Ordering::Less => match &self.left {
+                Some(left) => left.contains(key),
+                None => false,
+            },
+            std::cmp::Ordering::Greater => match &self.right {
+                Some(right) => right.contains(key),
+                None => false,
+            },
+        }
+    }
 }
 
 #[cfg(test)]
@@ -194,11 +257,7 @@ mod tests {
 
     #[test]
     fn remove() {
-        let mut ll = SortedBinaryTree::new();
-        ll.insert(2, 2);
-        ll.insert(1, 1);
-        ll.insert(3, 3);
-        ll.insert(4, 4);
+        let mut ll = SortedBinaryTree::from([2, 1, 3, 4]);
 
         ll.remove(&2);
 
@@ -206,5 +265,16 @@ mod tests {
         assert_eq!(root.value, 1);
         assert_eq!(root.right.clone().unwrap().value, 3);
         assert_eq!(root.right.unwrap().right.unwrap().value, 4);
+    }
+
+    #[test]
+    fn contains() {
+        let ll = SortedBinaryTree::from([2, 1, 3, 4]);
+
+        for i in 1..=4 {
+            assert!(ll.contains(&i));
+        }
+
+        assert!(!ll.contains(&5))
     }
 }

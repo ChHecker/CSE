@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
 
 #[derive(Clone, Debug)]
 pub struct BinaryHeap<V, P: Ord> {
@@ -7,26 +7,8 @@ pub struct BinaryHeap<V, P: Ord> {
 }
 
 impl<V, P: Ord> BinaryHeap<V, P> {
-    pub fn new(vals: impl IntoIterator<Item = (V, P)>) -> Self {
-        let mut ret = Self::default();
-        for (val, prio) in vals {
-            ret.insert_no_sifting(val, prio);
-        }
-
-        let (height, _) = Self::last_node(ret.len());
-        if let Some(root) = &mut ret.root {
-            if height > 0 {
-                for level in (1..height).rev() {
-                    for node in (0..2usize.pow(level as u32)).rev() {
-                        root.sift_down_specific_node(node, level - 1);
-                    }
-                }
-            }
-
-            root.sift_down();
-        }
-
-        ret
+    pub fn new() -> Self {
+        Self::default()
     }
 
     fn insert_no_sifting(&mut self, value: V, priority: P) {
@@ -111,13 +93,57 @@ impl<V, P: Ord> Default for BinaryHeap<V, P> {
     }
 }
 
-impl<P: Ord, V: Display> Display for BinaryHeap<V, P> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(root) = &self.root {
-            root.fmt(f)
-        } else {
-            Ok(())
+impl<V, P: Ord, const N: usize> From<[(V, P); N]> for BinaryHeap<V, P> {
+    fn from(value: [(V, P); N]) -> Self {
+        Self::from_iter(value)
+    }
+}
+
+impl<V, P: Ord> From<Vec<(V, P)>> for BinaryHeap<V, P> {
+    fn from(value: Vec<(V, P)>) -> Self {
+        Self::from_iter(value)
+    }
+}
+
+impl<P: Clone + Ord, const N: usize> From<[P; N]> for BinaryHeap<P, P> {
+    fn from(value: [P; N]) -> Self {
+        Self::from_iter(value)
+    }
+}
+
+impl<P: Clone + Ord> From<Vec<P>> for BinaryHeap<P, P> {
+    fn from(value: Vec<P>) -> Self {
+        Self::from_iter(value)
+    }
+}
+
+impl<V, P: Ord> FromIterator<(V, P)> for BinaryHeap<V, P> {
+    fn from_iter<T: IntoIterator<Item = (V, P)>>(iter: T) -> Self {
+        let mut ret = Self::default();
+        for (val, prio) in iter {
+            ret.insert_no_sifting(val, prio);
         }
+
+        let (height, _) = Self::last_node(ret.len());
+        if let Some(root) = &mut ret.root {
+            if height > 0 {
+                for level in (1..height).rev() {
+                    for node in (0..2usize.pow(level as u32)).rev() {
+                        root.sift_down_specific_node(node, level - 1);
+                    }
+                }
+            }
+
+            root.sift_down();
+        }
+
+        ret
+    }
+}
+
+impl<P: Clone + Ord> FromIterator<P> for BinaryHeap<P, P> {
+    fn from_iter<T: IntoIterator<Item = P>>(iter: T) -> Self {
+        Self::from_iter(iter.into_iter().map(|p| (p.clone(), p)))
     }
 }
 
@@ -304,23 +330,9 @@ impl<V, P: Ord> Node<V, P> {
     }
 }
 
-impl<P: Ord, V: Display> Display for Node<V, P> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(right) = &self.right {
-            right.fmt(f)?;
-        }
-        write!(f, "{}", self.value)?;
-        if let Some(left) = &self.left {
-            left.fmt(f)?;
-        }
-
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
+    use std::{borrow::Cow, fmt::Display};
 
     use ptree::TreeItem;
 
@@ -375,9 +387,9 @@ mod tests {
 
     #[test]
     fn build() {
-        let values = vec![15, 20, 9, 1, 11, 8, 4, 13].into_iter().map(|i| (i, i));
+        let values = vec![15, 20, 9, 1, 11, 8, 4, 13];
 
-        let bh = BinaryHeap::new(values);
+        let bh = BinaryHeap::from(values);
         bh.root.unwrap().assert_order();
     }
 
