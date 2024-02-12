@@ -62,3 +62,35 @@ impl<T: RealField + Copy, const D: usize> IntoMatrix<T, D> for OMatrix<T, Const<
         value
     }
 }
+
+pub enum IterativeResult<V> {
+    Converged(V),
+    MaxIterations(V),
+    Failed,
+}
+
+impl<V> IterativeResult<V> {
+    pub fn unwrap(self) -> V {
+        match self {
+            IterativeResult::Converged(v) => v,
+            IterativeResult::MaxIterations(v) => v,
+            IterativeResult::Failed => panic!("called unwrap on Failed"),
+        }
+    }
+
+    pub fn successful_or<E>(self, err: E) -> Result<V, E> {
+        match self {
+            IterativeResult::Converged(v) => Ok(v),
+            IterativeResult::MaxIterations(v) => Ok(v),
+            IterativeResult::Failed => Err(err),
+        }
+    }
+
+    pub fn convergent_or<E>(self, err: E) -> Result<V, E> {
+        match self {
+            IterativeResult::Converged(v) => Ok(v),
+            IterativeResult::MaxIterations(_) => Err(err),
+            IterativeResult::Failed => Err(err),
+        }
+    }
+}

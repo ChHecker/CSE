@@ -2,45 +2,13 @@ use nalgebra::{
     allocator::Allocator, ArrayStorage, Const, DefaultAllocator, DimMin, DimMinimum, ToTypenum,
 };
 
-use crate::{linalg::solve::Lu, IntoMatrix, IntoVector};
-
-pub enum NewtonResult<V> {
-    Converged(V),
-    MaxIteratoration(V),
-    Failed,
-}
-
-impl<V> NewtonResult<V> {
-    pub fn unwrap(self) -> V {
-        match self {
-            NewtonResult::Converged(v) => v,
-            NewtonResult::MaxIteratoration(v) => v,
-            NewtonResult::Failed => panic!("called unwrap on Failed"),
-        }
-    }
-
-    pub fn successful_or<E>(self, err: E) -> Result<V, E> {
-        match self {
-            NewtonResult::Converged(v) => Ok(v),
-            NewtonResult::MaxIteratoration(v) => Ok(v),
-            NewtonResult::Failed => Err(err),
-        }
-    }
-
-    pub fn convergent_or<E>(self, err: E) -> Result<V, E> {
-        match self {
-            NewtonResult::Converged(v) => Ok(v),
-            NewtonResult::MaxIteratoration(_) => Err(err),
-            NewtonResult::Failed => Err(err),
-        }
-    }
-}
+use crate::{linalg::solve::Lu, IntoMatrix, IntoVector, IterativeResult};
 
 pub fn newton<const D: usize, V: IntoVector<f64, D>, M: IntoMatrix<f64, D>>(
     f: impl Fn(V) -> V,
     df: impl Fn(V) -> M,
     x0: V,
-) -> NewtonResult<V>
+) -> IterativeResult<V>
 where
     Const<D>: DimMin<Const<D>, Output = Const<D>> + ToTypenum,
     DefaultAllocator: Allocator<f64, Const<D>, Const<D>>
@@ -56,20 +24,20 @@ where
     while f(a.clone()).into_vector().norm() > epsilon && n < nmax {
         let lu = match Lu::new(df(a.clone()).into_matrix()) {
             Some(lu) => lu,
-            None => return NewtonResult::Failed,
+            None => return IterativeResult::Failed,
         };
         let sol = match lu.solve(&f(a.clone()).into_vector()) {
             Some(s) => s,
-            None => return NewtonResult::Failed,
+            None => return IterativeResult::Failed,
         };
         a = V::from_vector(a.clone().into_vector() - sol);
         n += 1;
     }
 
     if n == nmax {
-        NewtonResult::MaxIteratoration(a)
+        IterativeResult::MaxIterations(a)
     } else {
-        NewtonResult::Converged(a)
+        IterativeResult::Converged(a)
     }
 }
 
