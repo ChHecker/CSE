@@ -416,15 +416,4 @@ mod tests {
             assert_abs_diff_eq!(yi, xi.cos(), epsilon = 0.1);
         }
     }
-
-    #[test]
-    fn test_newton_exam() {
-        let x = vec![-1., 0., 2.];
-        let y = vec![8., -4., 2.];
-        let ne = Newton::new(x, y);
-        dbg!(&ne.f_diag);
-        dbg!(&ne.f_last_row);
-        dbg!(ne.interpolate(0.));
-        dbg!(ne.interpolate(1.));
-    }
 }
