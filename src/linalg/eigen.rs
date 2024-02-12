@@ -1,12 +1,15 @@
 use nalgebra::{allocator::Allocator, Const, DefaultAllocator, Dim, OMatrix, OVector};
 
-use crate::linalg::solve::{Lu, Qr};
+use crate::{
+    linalg::solve::{Lu, Qr},
+    IterativeResult,
+};
 
 pub fn power_iteration<D: Dim>(
     a: OMatrix<f64, D, D>,
     q0: OVector<f64, D>,
     err: f64,
-) -> Option<(f64, OVector<f64, D>)>
+) -> IterativeResult<(f64, OVector<f64, D>)>
 where
     DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D> + Allocator<f64, Const<1>, D>,
 {
@@ -31,10 +34,10 @@ where
     }
 
     if i == max_iterations {
-        return None;
+        return IterativeResult::MaxIterations((nu, z));
     }
 
-    Some((nu, z))
+    IterativeResult::Converged((nu, z))
 }
 
 pub fn inverse_power_iteration<D: Dim>(
@@ -42,7 +45,7 @@ pub fn inverse_power_iteration<D: Dim>(
     q0: OVector<f64, D>,
     mu: f64,
     err: f64,
-) -> Option<(f64, OVector<f64, D>)>
+) -> IterativeResult<(f64, OVector<f64, D>)>
 where
     DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D> + Allocator<f64, Const<1>, D>,
 {
@@ -52,7 +55,10 @@ where
     let mut current_err = f64::INFINITY;
     let mut z = q0;
     let mut sigma = 0.;
-    let lu = Lu::new(&a - mu * OMatrix::<f64, D, D>::identity_generic(n_gen, n_gen))?;
+    let lu = match Lu::new(&a - mu * OMatrix::<f64, D, D>::identity_generic(n_gen, n_gen)) {
+        Some(lu) => lu,
+        None => return IterativeResult::Failed,
+    };
 
     let mut i = 0;
     let max_iterations = 10000;
@@ -60,7 +66,10 @@ where
     while 3. * current_err.abs() > err.abs() && i < max_iterations {
         i += 1;
 
-        z = lu.solve(&z)?;
+        z = match lu.solve(&z) {
+            Some(z) => z,
+            None => return IterativeResult::Failed,
+        };
         z.normalize_mut();
         sigma = (z.transpose() * &a * &z).x;
         let r = &a * &z - sigma * &z;
@@ -68,10 +77,10 @@ where
     }
 
     if i == max_iterations {
-        return None;
+        return IterativeResult::MaxIterations((sigma, z));
     }
 
-    Some((sigma, z))
+    IterativeResult::Converged((sigma, z))
 }
 
 pub fn qr_algorithm<D: Dim>(a: OMatrix<f64, D, D>, n: usize) -> OVector<f64, D>
