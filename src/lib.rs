@@ -86,11 +86,25 @@ impl<V> IterativeResult<V> {
         }
     }
 
-    pub fn convergent_or<E>(self, err: E) -> Result<V, E> {
+    pub fn converged_or<E>(self, err: E) -> Result<V, E> {
         match self {
             IterativeResult::Converged(v) => Ok(v),
             IterativeResult::MaxIterations(_) => Err(err),
             IterativeResult::Failed => Err(err),
+        }
+    }
+
+    pub fn is_converged(&self) -> bool {
+        match &self {
+            IterativeResult::Converged(_) => true,
+            IterativeResult::MaxIterations(_) | IterativeResult::Failed => false,
+        }
+    }
+
+    pub fn is_successful(&self) -> bool {
+        match &self {
+            IterativeResult::Converged(_) | IterativeResult::MaxIterations(_) => true,
+            IterativeResult::Failed => false,
         }
     }
 }
