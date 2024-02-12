@@ -1,4 +1,4 @@
-use crate::{newton::newton, IntoMatrix, IntoVector};
+use crate::{newton::newton, IntoMatrix, IntoVector, IterativeResult};
 use nalgebra::{
     allocator::Allocator, Const, DefaultAllocator, DimMin, DimMinimum, OMatrix, RealField, SVector,
     ToTypenum,
@@ -85,7 +85,7 @@ pub fn implicit_euler<const D: usize, V: IntoVector<f64, D>, M: IntoMatrix<f64, 
     y0: V,
     dt: f64,
     t_end: f64,
-) -> Result<Vec<V>, Vec<V>>
+) -> IterativeResult<Vec<V>>
 where
     Const<D>: DimMin<Const<D>, Output = Const<D>> + ToTypenum,
     DefaultAllocator: Allocator<f64, Const<D>, Const<D>>
@@ -97,27 +97,34 @@ where
     let mut y = vec![y0.into_vector(); n_steps + 1];
 
     for i in 0..n_steps {
-        y[i + 1] = newton(
+        y[i + 1] = match newton(
             |x| x - y[i] - f(t[i], V::from_vector(x)).into_vector() * dt,
             |x| {
                 OMatrix::<f64, Const<D>, Const<D>>::identity()
                     - df(t[i], V::from_vector(x)).into_matrix() * dt
             },
             y[i],
-        )
-        .successful_or(
-            y[0..i]
-                .iter()
-                .map(|elem| V::from_vector(*elem))
-                .collect::<Vec<V>>(),
-        )?;
+        ) {
+            IterativeResult::Converged(y) => y,
+            IterativeResult::MaxIterations(_) => {
+                return IterativeResult::MaxIterations(
+                    y[0..i]
+                        .iter()
+                        .map(|elem| V::from_vector(*elem))
+                        .collect::<Vec<V>>(),
+                )
+            }
+            IterativeResult::Failed => return IterativeResult::Failed,
+        };
 
         if (y[i + 1] - y[i] - call(&f, t[i], y[i + 1]) * dt).norm() > 1e-8 {
-            return Err(y[0..i].iter().map(|elem| V::from_vector(*elem)).collect());
+            return IterativeResult::MaxIterations(
+                y[0..i].iter().map(|elem| V::from_vector(*elem)).collect(),
+            );
         }
     }
 
-    Ok(y.into_iter().map(|elem| V::from_vector(elem)).collect())
+    IterativeResult::Converged(y.into_iter().map(|elem| V::from_vector(elem)).collect())
 }
 
 #[cfg(test)]
@@ -155,7 +162,7 @@ mod tests {
     #[test]
     fn test_implicit_euler() {
         let ie = implicit_euler(dahlquist, dahlquist_derivative, 1., 0.5, 100.);
-        assert!(ie.is_ok());
+        assert!(ie.is_converged());
         let ie = ie.unwrap();
         assert!(ie[0] == 1.);
         assert!(ie.last().unwrap().abs() < 1e-7);
