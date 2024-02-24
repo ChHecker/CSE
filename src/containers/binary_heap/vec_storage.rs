@@ -1,11 +1,19 @@
 use super::*;
 
 #[derive(Clone, Debug, Default)]
-pub struct VecStorage<V, P: Ord> {
-    pub(super) vec: Vec<(V, P)>,
+pub struct VecStorage<V, P: Ord, Vp: ValuePriorityPair<V, P>> {
+    pub(crate) vec: Vec<Vp>,
+    phantom: PhantomData<(V, P)>,
 }
 
-impl<V, P: Ord> VecStorage<V, P> {
+impl<V, P: Ord, Vp: ValuePriorityPair<V, P>> VecStorage<V, P, Vp> {
+    pub(crate) fn new(vec: Vec<Vp>) -> Self {
+        Self {
+            vec,
+            phantom: PhantomData,
+        }
+    }
+
     fn parent(node: usize) -> Option<usize> {
         node.checked_sub(1).map(|i| i / 2)
     }
@@ -29,7 +37,7 @@ impl<V, P: Ord> VecStorage<V, P> {
     }
 }
 
-impl<V, P: Ord> Storage<V, P> for VecStorage<V, P> {
+impl<V, P: Ord, Vp: ValuePriorityPair<V, P>> Storage<V, P, Vp> for VecStorage<V, P, Vp> {
     fn len(&self) -> usize {
         self.vec.len()
     }
@@ -38,8 +46,8 @@ impl<V, P: Ord> Storage<V, P> for VecStorage<V, P> {
         self.vec.is_empty()
     }
 
-    fn push(&mut self, value: V, priority: P) {
-        self.vec.push((value, priority));
+    fn push(&mut self, value_priority_pair: Vp) {
+        self.vec.push(value_priority_pair);
     }
 
     fn sift_up_last_node(&mut self) {
@@ -47,7 +55,7 @@ impl<V, P: Ord> Storage<V, P> for VecStorage<V, P> {
         let mut opt_parent = Self::parent(current_node);
 
         while let Some(parent) = opt_parent {
-            if self.vec[current_node].1 > self.vec[parent].1 {
+            if self.vec[current_node].priority() > self.vec[parent].priority() {
                 break;
             }
             self.vec.swap(current_node, parent);
@@ -67,7 +75,7 @@ impl<V, P: Ord> Storage<V, P> for VecStorage<V, P> {
             match (left, right) {
                 (None, None) => break,
                 (None, Some(right)) => {
-                    if self.vec[right].1 < self.vec[current_node].1 {
+                    if self.vec[right].priority() < self.vec[current_node].priority() {
                         self.vec.swap(current_node, right);
                         current_node = right;
                     } else {
@@ -75,7 +83,7 @@ impl<V, P: Ord> Storage<V, P> for VecStorage<V, P> {
                     }
                 }
                 (Some(left), None) => {
-                    if self.vec[left].1 < self.vec[current_node].1 {
+                    if self.vec[left].priority() < self.vec[current_node].priority() {
                         self.vec.swap(current_node, left);
                         current_node = left;
                     } else {
@@ -83,13 +91,13 @@ impl<V, P: Ord> Storage<V, P> for VecStorage<V, P> {
                     }
                 }
                 (Some(left), Some(right)) => {
-                    let new = if self.vec[left].1 <= self.vec[right].1 {
+                    let new = if self.vec[left].priority() <= self.vec[right].priority() {
                         left
                     } else {
                         right
                     };
 
-                    if self.vec[new].1 < self.vec[current_node].1 {
+                    if self.vec[new].priority() < self.vec[current_node].priority() {
                         self.vec.swap(current_node, new);
                         current_node = new;
                     } else {
@@ -102,7 +110,7 @@ impl<V, P: Ord> Storage<V, P> for VecStorage<V, P> {
 
     fn pop(&mut self) -> Option<V> {
         if self.len() <= 1 {
-            return self.vec.pop().map(|(v, _)| v);
+            return self.vec.pop().map(|vp| vp.into_value());
         }
 
         let last_node = self.len() - 1;
@@ -111,19 +119,17 @@ impl<V, P: Ord> Storage<V, P> for VecStorage<V, P> {
 
         self.sift_down(0);
 
-        Some(root.0)
+        Some(root.into_value())
     }
 
     fn min(&self) -> Option<&V> {
-        self.vec.first().map(|(v, _)| v)
+        self.vec.first().map(|vp| vp.value())
     }
 }
 
-impl<V, P: Ord> FromIterator<(V, P)> for VecStorage<V, P> {
-    fn from_iter<T: IntoIterator<Item = (V, P)>>(iter: T) -> Self {
-        Self {
-            vec: iter.into_iter().collect(),
-        }
+impl<V, P: Ord, Vp: ValuePriorityPair<V, P>> FromIterator<Vp> for VecStorage<V, P, Vp> {
+    fn from_iter<T: IntoIterator<Item = Vp>>(iter: T) -> Self {
+        Self::new(iter.into_iter().collect())
     }
 }
 
@@ -131,27 +137,29 @@ impl<V, P: Ord> FromIterator<(V, P)> for VecStorage<V, P> {
 mod tests {
     use super::*;
 
-    impl<P: Debug + Ord, V> VecStorage<V, P> {
+    impl<P: Debug + Ord, V, Vp: ValuePriorityPair<V, P>> VecStorage<V, P, Vp> {
         fn assert_order(&self) {
-            for (i, (_, p)) in self.vec.iter().enumerate() {
+            for (i, vp) in self.vec.iter().enumerate() {
+                let p = vp.priority();
+
                 let left = self.left(i);
                 let right = self.right(i);
 
                 if let Some(left) = left {
                     assert!(
-                        *p < self.vec[left].1,
+                        p < self.vec[left].priority(),
                         "own priority: {:?}, left priority: {:?}",
                         *p,
-                        self.vec[left].1
+                        self.vec[left].priority()
                     );
                 }
 
                 if let Some(right) = right {
                     assert!(
-                        *p < self.vec[right].1,
+                        p < self.vec[right].priority(),
                         "own priority: {:?}, right priority: {:?}",
                         *p,
-                        self.vec[right].1
+                        self.vec[right].priority()
                     );
                 }
             }
@@ -163,29 +171,29 @@ mod tests {
         let values = vec![15, 20, 9, 1, 11, 8, 4, 13];
         let len = values.len();
 
-        let bh: VecBinaryHeap<u32, u32> = BinaryHeap::from(values);
+        let bh: VecBinaryHeap<u32, u32, u32> = BinaryHeap::from(values);
         assert_eq!(bh.len(), len);
         bh.storage.assert_order();
     }
 
     #[test]
     fn from_iter() {
-        let bh: VecBinaryHeap<u32, u32> = (0..10).rev().collect();
+        let bh: VecBinaryHeap<u32, u32, u32> = (0..10).rev().collect();
         bh.storage.assert_order();
     }
 
     #[test]
     fn insert() {
-        let mut bh: VecBinaryHeap<u32, u32> = BinaryHeap::default();
+        let mut bh: VecBinaryHeap<u32, u32, u32> = BinaryHeap::default();
         for i in (0..10).rev() {
-            bh.insert(i, i);
+            bh.insert(i);
             bh.storage.assert_order();
         }
     }
 
     #[test]
     fn pop() {
-        let mut bh: VecBinaryHeap<u32, u32> = (0..10).rev().collect();
+        let mut bh: VecBinaryHeap<u32, u32, u32> = (0..10).rev().collect();
 
         for _ in 0..9 {
             bh.pop();

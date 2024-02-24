@@ -1,12 +1,13 @@
 use super::*;
 
 #[derive(Clone, Debug)]
-pub struct NodeStorage<V, P: Ord> {
-    pub(super) root: Option<Node<V, P>>,
+pub struct NodeStorage<V, P: Ord, Vp: ValuePriorityPair<V, P>> {
+    pub(super) root: Option<Node<V, P, Vp>>,
     len: usize,
+    phantom: PhantomData<(V, P, Vp)>,
 }
 
-impl<V, P: Ord> NodeStorage<V, P> {
+impl<V, P: Ord, Vp: ValuePriorityPair<V, P>> NodeStorage<V, P, Vp> {
     fn level(len: usize) -> usize {
         ((len + 1) as f64).log2().ceil() as usize - 1 // 1: 0, 2: 1, 3: 1
     }
@@ -34,7 +35,7 @@ impl<V, P: Ord> NodeStorage<V, P> {
     }
 }
 
-impl<V, P: Ord> Storage<V, P> for NodeStorage<V, P> {
+impl<V, P: Ord, Vp: ValuePriorityPair<V, P>> Storage<V, P, Vp> for NodeStorage<V, P, Vp> {
     fn len(&self) -> usize {
         self.len
     }
@@ -43,13 +44,13 @@ impl<V, P: Ord> Storage<V, P> for NodeStorage<V, P> {
         self.root.is_none()
     }
 
-    fn push(&mut self, value: V, priority: P) {
+    fn push(&mut self, value_priority_pair: Vp) {
         match &mut self.root {
             Some(root) => {
                 let (height, next_node) = Self::next_node(self.len);
-                root.insert(value, priority, next_node, height - 1);
+                root.insert(value_priority_pair, next_node, height - 1);
             }
-            None => self.root = Some(Node::new(value, priority)),
+            None => self.root = Some(Node::new(value_priority_pair)),
         }
 
         self.len += 1;
@@ -76,7 +77,7 @@ impl<V, P: Ord> Storage<V, P> for NodeStorage<V, P> {
     fn pop(&mut self) -> Option<V> {
         if let Some(root) = &self.root {
             if root.left.is_none() && root.right.is_none() {
-                return self.root.take().map(|r| r.value);
+                return self.root.take().map(|r| r.into_value());
             }
         }
 
@@ -87,32 +88,36 @@ impl<V, P: Ord> Storage<V, P> for NodeStorage<V, P> {
         let mut last_node = root.pop(last_node, height - 1);
 
         // Replace root with last node
-        std::mem::swap(&mut root.value, &mut last_node.value);
-        std::mem::swap(&mut root.priority, &mut last_node.priority);
+        std::mem::swap(root.value_mut(), last_node.value_mut());
+        std::mem::swap(root.priority_mut(), last_node.priority_mut());
 
         root.sift_down();
 
         self.len -= 1;
 
-        Some(last_node.value)
+        Some(last_node.into_value())
     }
 
     fn min(&self) -> Option<&V> {
-        self.root.as_ref().map(|r| &r.value)
+        self.root.as_ref().map(|r| r.value())
     }
 }
 
-impl<V, P: Ord> Default for NodeStorage<V, P> {
+impl<V, P: Ord, Vp: ValuePriorityPair<V, P>> Default for NodeStorage<V, P, Vp> {
     fn default() -> Self {
-        Self { root: None, len: 0 }
+        Self {
+            root: None,
+            len: 0,
+            phantom: PhantomData,
+        }
     }
 }
 
-impl<V, P: Ord> FromIterator<(V, P)> for NodeStorage<V, P> {
-    fn from_iter<T: IntoIterator<Item = (V, P)>>(iter: T) -> Self {
+impl<V, P: Ord, Vp: ValuePriorityPair<V, P>> FromIterator<Vp> for NodeStorage<V, P, Vp> {
+    fn from_iter<T: IntoIterator<Item = Vp>>(iter: T) -> Self {
         let mut ret = Self::default();
-        for (val, prio) in iter {
-            ret.push(val, prio);
+        for vp in iter {
+            ret.push(vp);
         }
 
         ret
@@ -120,21 +125,41 @@ impl<V, P: Ord> FromIterator<(V, P)> for NodeStorage<V, P> {
 }
 
 #[derive(Clone, Debug)]
-pub(super) struct Node<V, P: Ord> {
-    pub(super) priority: P,
-    pub(super) value: V,
-    pub(super) left: Option<Box<Node<V, P>>>,
-    pub(super) right: Option<Box<Node<V, P>>>,
+pub(super) struct Node<V, P: Ord, Vp: ValuePriorityPair<V, P>> {
+    pub(super) value_priority_pair: Vp,
+    pub(super) left: Option<Box<Node<V, P, Vp>>>,
+    pub(super) right: Option<Box<Node<V, P, Vp>>>,
+    phantom: PhantomData<(V, P)>,
 }
 
-impl<V, P: Ord> Node<V, P> {
-    fn new(value: V, priority: P) -> Self {
+impl<V, P: Ord, Vp: ValuePriorityPair<V, P>> Node<V, P, Vp> {
+    fn new(value_priority_pair: Vp) -> Self {
         Self {
-            priority,
-            value,
+            value_priority_pair,
             left: None,
             right: None,
+            phantom: PhantomData,
         }
+    }
+
+    fn priority(&self) -> &P {
+        self.value_priority_pair.priority()
+    }
+
+    fn value(&self) -> &V {
+        self.value_priority_pair.value()
+    }
+
+    fn priority_mut(&mut self) -> &mut P {
+        self.value_priority_pair.priority_mut()
+    }
+
+    fn value_mut(&mut self) -> &mut V {
+        self.value_priority_pair.value_mut()
+    }
+
+    fn into_value(self) -> V {
+        self.value_priority_pair.into_value()
     }
 
     fn recursion_step(&mut self, target_node: usize, current_height: usize) -> (bool, bool) {
@@ -146,28 +171,26 @@ impl<V, P: Ord> Node<V, P> {
         match (self.left.as_mut(), self.right.as_mut()) {
             (None, None) => (),
             (None, Some(right)) => {
-                if right.priority < self.priority {
-                    std::mem::swap(&mut self.value, &mut right.value);
-                    std::mem::swap(&mut self.priority, &mut right.priority);
+                if right.priority() < self.value_priority_pair.priority() {
+                    self.value_priority_pair
+                        .swap(&mut right.value_priority_pair);
                     right.sift_down();
                 }
             }
             (Some(left), None) => {
-                if left.priority < self.priority {
-                    std::mem::swap(&mut self.value, &mut left.value);
-                    std::mem::swap(&mut self.priority, &mut left.priority);
+                if left.priority() < self.value_priority_pair.priority() {
+                    self.value_priority_pair.swap(&mut left.value_priority_pair);
                     left.sift_down();
                 }
             }
             (Some(left), Some(right)) => {
-                let new = if left.priority <= right.priority {
+                let new = if left.priority() <= right.priority() {
                     left
                 } else {
                     right
                 };
-                if new.priority < self.priority {
-                    std::mem::swap(&mut self.value, &mut new.value);
-                    std::mem::swap(&mut self.priority, &mut new.priority);
+                if new.priority() < self.value_priority_pair.priority() {
+                    self.value_priority_pair.swap(&mut new.value_priority_pair);
                     new.sift_down();
                 }
             }
@@ -205,10 +228,10 @@ impl<V, P: Ord> Node<V, P> {
     }
 
     #[allow(clippy::collapsible_else_if)]
-    fn sift_up(&mut self, target_node: usize, current_height: usize) -> Option<(&mut V, &mut P)> {
+    fn sift_up(&mut self, target_node: usize, current_height: usize) -> Option<&mut Vp> {
         let (recurse, left) = self.recursion_step(target_node, current_height);
         // Haven't reached next to last level
-        let (val, prio) = if recurse {
+        let vp = if recurse {
             if left {
                 self.left
                     .as_mut()
@@ -224,45 +247,42 @@ impl<V, P: Ord> Node<V, P> {
         } else {
             if left {
                 let left = self.left.as_mut().unwrap();
-                Some((&mut left.value, &mut left.priority))
+                Some(&mut left.value_priority_pair)
             } else {
                 let right = self.right.as_mut().unwrap();
-                Some((&mut right.value, &mut right.priority))
+                Some(&mut right.value_priority_pair)
             }
         }?;
 
-        if *prio < self.priority {
-            std::mem::swap(&mut self.value, val);
-            std::mem::swap(&mut self.priority, prio);
-            Some((&mut self.value, &mut self.priority))
+        if vp.priority() < self.value_priority_pair.priority() {
+            self.value_priority_pair.swap(vp);
+            Some(&mut self.value_priority_pair)
         } else {
             None
         }
     }
 
     #[allow(clippy::collapsible_else_if)]
-    fn insert(&mut self, value: V, priority: P, target_node: usize, current_height: usize) {
+    fn insert(&mut self, value_priority_pair: Vp, target_node: usize, current_height: usize) {
         let (recurse, left) = self.recursion_step(target_node, current_height);
         // Haven't reached next to last level
         if recurse {
             if left {
                 self.left.as_mut().unwrap().insert(
-                    value,
-                    priority,
+                    value_priority_pair,
                     target_node,
                     current_height - 1,
                 );
             } else {
                 self.right.as_mut().unwrap().insert(
-                    value,
-                    priority,
+                    value_priority_pair,
                     target_node,
                     current_height - 1,
                 );
             }
         // Reached next to last level
         } else {
-            let node = Box::new(Node::new(value, priority));
+            let node = Box::new(Node::new(value_priority_pair));
             if left {
                 self.left = Some(node);
             } else {
@@ -272,7 +292,7 @@ impl<V, P: Ord> Node<V, P> {
     }
 
     #[allow(clippy::collapsible_else_if)]
-    fn pop(&mut self, target_node: usize, current_height: usize) -> Box<Node<V, P>> {
+    fn pop(&mut self, target_node: usize, current_height: usize) -> Box<Node<V, P, Vp>> {
         let (recurse, left) = self.recursion_step(target_node, current_height);
         // Haven't reached next to last level
         if recurse {
@@ -306,23 +326,23 @@ impl<V, P: Ord> Node<V, P> {
 mod tests {
     use super::*;
 
-    impl<P: Debug + Ord, V> Node<V, P> {
+    impl<P: Debug + Ord, V, Vp: ValuePriorityPair<V, P>> Node<V, P, Vp> {
         fn assert_order(&self) {
             if let Some(left) = &self.left {
                 assert!(
-                    left.priority >= self.priority,
+                    left.priority() >= self.priority(),
                     "own priority: {:?}, left priority: {:?}",
-                    self.priority,
-                    left.priority
+                    self.priority(),
+                    left.priority()
                 );
                 left.assert_order();
             }
             if let Some(right) = &self.right {
                 assert!(
-                    right.priority >= self.priority,
+                    right.priority() >= self.priority(),
                     "own priority: {:?}, right priority: {:?}",
-                    self.priority,
-                    right.priority
+                    self.priority(),
+                    right.priority()
                 );
                 right.assert_order();
             }
@@ -334,29 +354,29 @@ mod tests {
         let values = vec![15, 20, 9, 1, 11, 8, 4, 13];
         let len = values.len();
 
-        let bh: NodeBinaryHeap<u32, u32> = BinaryHeap::from(values);
+        let bh: NodeBinaryHeap<u32, u32, u32> = BinaryHeap::from(values);
         assert_eq!(bh.len(), len);
         bh.storage.root.unwrap().assert_order();
     }
 
     #[test]
     fn from_iter() {
-        let bh: NodeBinaryHeap<u32, u32> = (0..10).rev().collect();
+        let bh: NodeBinaryHeap<u32, u32, u32> = (0..10).rev().collect();
         bh.storage.root.unwrap().assert_order();
     }
 
     #[test]
     fn insert() {
-        let mut bh: NodeBinaryHeap<u32, u32> = BinaryHeap::default();
+        let mut bh: NodeBinaryHeap<u32, u32, u32> = BinaryHeap::default();
         for i in (0..10).rev() {
-            bh.insert(i, i);
+            bh.insert(i);
             bh.storage.root.as_ref().unwrap().assert_order();
         }
     }
 
     #[test]
     fn pop() {
-        let mut bh: NodeBinaryHeap<u32, u32> = (0..10).rev().collect();
+        let mut bh: NodeBinaryHeap<u32, u32, u32> = (0..10).rev().collect();
 
         for _ in 0..9 {
             bh.pop();
