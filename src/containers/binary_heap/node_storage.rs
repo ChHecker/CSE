@@ -1,41 +1,19 @@
-use std::fmt::Debug;
+use super::*;
 
 #[derive(Clone, Debug)]
-pub struct BinaryHeap<V, P: Ord> {
-    root: Option<Box<Node<V, P>>>,
+pub(super) struct NodeStorage<V, P: Ord> {
+    pub(super) root: Option<Node<V, P>>,
     len: usize,
 }
 
-impl<V, P: Ord> BinaryHeap<V, P> {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    fn insert_no_sifting(&mut self, value: V, priority: P) {
-        match &mut self.root {
-            Some(root) => {
-                let (height, next_node) = Self::next_node(self.len);
-                root.insert(value, priority, next_node, height - 1);
-            }
-            None => self.root = Some(Box::new(Node::new(value, priority))),
-        }
-
-        self.len += 1;
-    }
-
-    pub fn len(&self) -> usize {
-        self.len
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.root.is_none()
+impl<V, P: Ord> NodeStorage<V, P> {
+    fn level(len: usize) -> usize {
+        ((len + 1) as f64).log2().ceil() as usize - 1 // 1: 0, 2: 1, 3: 1
     }
 
     // Get level and number in level of last node of tree
     fn last_node(len: usize) -> (usize, usize) {
-        let height = ((len + 1) as f64).log2().ceil() as usize - 1; // 1: 0, 2: 1, 3: 1
-        let target_node = len - 2usize.pow(height as u32); // 1: 0, 2: 0, 3: 1
-        (height, target_node)
+        Self::index_to_level(len - 1)
     }
 
     // Get level and number in level of first free slot in tree
@@ -48,17 +26,54 @@ impl<V, P: Ord> BinaryHeap<V, P> {
         }
     }
 
-    pub fn insert(&mut self, value: V, priority: P) {
-        self.insert_no_sifting(value, priority);
-        let (height, last_node) = Self::last_node(self.len());
-        if height > 0 {
-            if let Some(root) = &mut self.root {
-                root.sift_up(last_node, height - 1);
+    fn index_to_level(node: usize) -> (usize, usize) {
+        let level = Self::level(node + 1);
+        let target_node = node + 1 - 2usize.pow(level as u32);
+
+        (level, target_node)
+    }
+}
+
+impl<V, P: Ord> Storage<V, P> for NodeStorage<V, P> {
+    fn len(&self) -> usize {
+        self.len
+    }
+
+    fn is_empty(&self) -> bool {
+        self.root.is_none()
+    }
+
+    fn push(&mut self, value: V, priority: P) {
+        match &mut self.root {
+            Some(root) => {
+                let (height, next_node) = Self::next_node(self.len);
+                root.insert(value, priority, next_node, height - 1);
+            }
+            None => self.root = Some(Node::new(value, priority)),
+        }
+
+        self.len += 1;
+    }
+
+    fn sift_up_last_node(&mut self) {
+        let (height, last_node) = Self::last_node(self.len);
+        if self.len() > 1 {
+            self.root.as_mut().unwrap().sift_up(last_node, height - 1);
+        }
+    }
+
+    fn sift_down(&mut self, node: usize) {
+        if let Some(root) = &mut self.root {
+            if node == 0 {
+                root.sift_down();
+            } else {
+                let (level, node) = Self::index_to_level(node);
+                root.sift_down_specific_node(node, level - 1);
             }
         }
     }
 
-    pub fn pop(&mut self) -> Option<V> {
+    fn pop(&mut self) -> Option<V> {
         if let Some(root) = &self.root {
             if root.left.is_none() && root.right.is_none() {
                 return self.root.take().map(|r| r.value);
@@ -82,77 +97,34 @@ impl<V, P: Ord> BinaryHeap<V, P> {
         Some(last_node.value)
     }
 
-    pub fn min(&self) -> Option<&V> {
+    fn min(&self) -> Option<&V> {
         self.root.as_ref().map(|r| &r.value)
     }
 }
 
-impl<V, P: Ord> Default for BinaryHeap<V, P> {
+impl<V, P: Ord> Default for NodeStorage<V, P> {
     fn default() -> Self {
         Self { root: None, len: 0 }
     }
 }
 
-impl<V, P: Ord, const N: usize> From<[(V, P); N]> for BinaryHeap<V, P> {
-    fn from(value: [(V, P); N]) -> Self {
-        Self::from_iter(value)
-    }
-}
-
-impl<V, P: Ord> From<Vec<(V, P)>> for BinaryHeap<V, P> {
-    fn from(value: Vec<(V, P)>) -> Self {
-        Self::from_iter(value)
-    }
-}
-
-impl<P: Clone + Ord, const N: usize> From<[P; N]> for BinaryHeap<P, P> {
-    fn from(value: [P; N]) -> Self {
-        Self::from_iter(value)
-    }
-}
-
-impl<P: Clone + Ord> From<Vec<P>> for BinaryHeap<P, P> {
-    fn from(value: Vec<P>) -> Self {
-        Self::from_iter(value)
-    }
-}
-
-impl<V, P: Ord> FromIterator<(V, P)> for BinaryHeap<V, P> {
+impl<V, P: Ord> FromIterator<(V, P)> for NodeStorage<V, P> {
     fn from_iter<T: IntoIterator<Item = (V, P)>>(iter: T) -> Self {
         let mut ret = Self::default();
         for (val, prio) in iter {
-            ret.insert_no_sifting(val, prio);
-        }
-
-        let (height, _) = Self::last_node(ret.len());
-        if let Some(root) = &mut ret.root {
-            if height > 0 {
-                for level in (1..height).rev() {
-                    for node in (0..2usize.pow(level as u32)).rev() {
-                        root.sift_down_specific_node(node, level - 1);
-                    }
-                }
-            }
-
-            root.sift_down();
+            ret.push(val, prio);
         }
 
         ret
     }
 }
 
-impl<P: Clone + Ord> FromIterator<P> for BinaryHeap<P, P> {
-    fn from_iter<T: IntoIterator<Item = P>>(iter: T) -> Self {
-        Self::from_iter(iter.into_iter().map(|p| (p.clone(), p)))
-    }
-}
-
 #[derive(Clone, Debug)]
-struct Node<V, P: Ord> {
-    priority: P,
-    value: V,
-    left: Option<Box<Node<V, P>>>,
-    right: Option<Box<Node<V, P>>>,
+pub(super) struct Node<V, P: Ord> {
+    pub(super) priority: P,
+    pub(super) value: V,
+    pub(super) left: Option<Box<Node<V, P>>>,
+    pub(super) right: Option<Box<Node<V, P>>>,
 }
 
 impl<V, P: Ord> Node<V, P> {
@@ -332,10 +304,6 @@ impl<V, P: Ord> Node<V, P> {
 
 #[cfg(test)]
 mod tests {
-    use std::{borrow::Cow, fmt::Display};
-
-    use ptree::TreeItem;
-
     use super::*;
 
     impl<P: Debug + Ord, V> Node<V, P> {
@@ -361,57 +329,38 @@ mod tests {
         }
     }
 
-    impl<P: Clone + Ord, V: Clone + Display> TreeItem for Node<V, P> {
-        type Child = Self;
-
-        fn write_self<W: std::io::Write>(
-            &self,
-            f: &mut W,
-            style: &ptree::Style,
-        ) -> std::io::Result<()> {
-            write!(f, "{}", style.paint(self.value.clone()))
-        }
-
-        fn children(&self) -> Cow<[Self::Child]> {
-            let mut children = vec![];
-            if let Some(left) = self.left.clone() {
-                children.push(*left);
-            }
-            if let Some(right) = self.right.clone() {
-                children.push(*right);
-            }
-
-            Cow::from(children)
-        }
-    }
-
     #[test]
     fn build() {
         let values = vec![15, 20, 9, 1, 11, 8, 4, 13];
+        let len = values.len();
 
-        let bh = BinaryHeap::from(values);
-        bh.root.unwrap().assert_order();
+        let bh: BinaryHeap<u32, u32, NodeStorage<u32, u32>> = BinaryHeap::from(values);
+        assert_eq!(bh.len(), len);
+        bh.storage.root.unwrap().assert_order();
+    }
+
+    #[test]
+    fn from_iter() {
+        let bh: BinaryHeap<u32, u32, NodeStorage<u32, u32>> = (0..10).rev().collect();
+        bh.storage.root.unwrap().assert_order();
     }
 
     #[test]
     fn insert() {
-        let mut bh = BinaryHeap::default();
+        let mut bh: BinaryHeap<u32, u32, NodeStorage<u32, u32>> = BinaryHeap::default();
         for i in (0..10).rev() {
             bh.insert(i, i);
-            bh.root.as_ref().unwrap().assert_order();
+            bh.storage.root.as_ref().unwrap().assert_order();
         }
     }
 
     #[test]
-    fn remove_min() {
-        let mut bh = BinaryHeap::default();
-        for i in (0..10).rev() {
-            bh.insert(i, i);
-        }
+    fn pop() {
+        let mut bh: BinaryHeap<u32, u32, NodeStorage<u32, u32>> = (0..10).rev().collect();
 
         for _ in 0..9 {
             bh.pop();
-            bh.root.as_ref().unwrap().assert_order();
+            bh.storage.root.as_ref().unwrap().assert_order();
         }
     }
 }
