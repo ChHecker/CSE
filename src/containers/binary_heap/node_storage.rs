@@ -1,7 +1,7 @@
 use super::*;
 
 #[derive(Clone, Debug)]
-pub(super) struct NodeStorage<V, P: Ord> {
+pub struct NodeStorage<V, P: Ord> {
     pub(super) root: Option<Node<V, P>>,
     len: usize,
 }
@@ -334,20 +334,20 @@ mod tests {
         let values = vec![15, 20, 9, 1, 11, 8, 4, 13];
         let len = values.len();
 
-        let bh: BinaryHeap<u32, u32, NodeStorage<u32, u32>> = BinaryHeap::from(values);
+        let bh: NodeBinaryHeap<u32, u32> = BinaryHeap::from(values);
         assert_eq!(bh.len(), len);
         bh.storage.root.unwrap().assert_order();
     }
 
     #[test]
     fn from_iter() {
-        let bh: BinaryHeap<u32, u32, NodeStorage<u32, u32>> = (0..10).rev().collect();
+        let bh: NodeBinaryHeap<u32, u32> = (0..10).rev().collect();
         bh.storage.root.unwrap().assert_order();
     }
 
     #[test]
     fn insert() {
-        let mut bh: BinaryHeap<u32, u32, NodeStorage<u32, u32>> = BinaryHeap::default();
+        let mut bh: NodeBinaryHeap<u32, u32> = BinaryHeap::default();
         for i in (0..10).rev() {
             bh.insert(i, i);
             bh.storage.root.as_ref().unwrap().assert_order();
@@ -356,7 +356,7 @@ mod tests {
 
     #[test]
     fn pop() {
-        let mut bh: BinaryHeap<u32, u32, NodeStorage<u32, u32>> = (0..10).rev().collect();
+        let mut bh: NodeBinaryHeap<u32, u32> = (0..10).rev().collect();
 
         for _ in 0..9 {
             bh.pop();

@@ -1,7 +1,7 @@
 use std::{fmt::Debug, marker::PhantomData};
 
-mod node_storage;
-mod vec_storage;
+pub mod node_storage;
+pub mod vec_storage;
 
 pub trait Storage<V, P: Ord> {
     fn len(&self) -> usize;
@@ -22,6 +22,9 @@ where
     storage: S,
     phantom: PhantomData<(V, P)>,
 }
+
+pub type NodeBinaryHeap<V, P> = BinaryHeap<V, P, node_storage::NodeStorage<V, P>>;
+pub type VecBinaryHeap<V, P> = BinaryHeap<V, P, vec_storage::VecStorage<V, P>>;
 
 impl<V, P, S> BinaryHeap<V, P, S>
 where
