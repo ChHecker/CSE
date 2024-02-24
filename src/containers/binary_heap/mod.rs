@@ -67,9 +67,9 @@ impl<V, P: Ord> ValuePriorityPair<V, P> for (V, P) {
 pub trait Storage<V, P: Ord, Vp: ValuePriorityPair<V, P>> {
     fn len(&self) -> usize;
     fn is_empty(&self) -> bool;
-    fn push(&mut self, value_priority_pair: Vp);
     fn sift_up_last_node(&mut self);
     fn sift_down(&mut self, node: usize);
+    fn push(&mut self, value_priority_pair: Vp);
     fn pop(&mut self) -> Option<V>;
     fn min(&self) -> Option<&V>;
 }
@@ -85,8 +85,9 @@ where
     phantom: PhantomData<(V, P, Vp)>,
 }
 
-pub type NodeBinaryHeap<V, P, Vp> = BinaryHeap<V, P, Vp, node_storage::NodeStorage<V, P, Vp>>;
-pub type VecBinaryHeap<V, P, Vp> = BinaryHeap<V, P, Vp, vec_storage::VecStorage<V, P, Vp>>;
+pub type NodeBinaryHeap<V, P = V, Vp = V> =
+    BinaryHeap<V, P, Vp, node_storage::NodeStorage<V, P, Vp>>;
+pub type VecBinaryHeap<V, P = V, Vp = V> = BinaryHeap<V, P, Vp, vec_storage::VecStorage<V, P, Vp>>;
 
 impl<V, P, Vp, S> BinaryHeap<V, P, Vp, S>
 where

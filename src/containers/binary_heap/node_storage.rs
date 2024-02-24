@@ -354,20 +354,20 @@ mod tests {
         let values = vec![15, 20, 9, 1, 11, 8, 4, 13];
         let len = values.len();
 
-        let bh: NodeBinaryHeap<u32, u32, u32> = BinaryHeap::from(values);
+        let bh: NodeBinaryHeap<u32> = BinaryHeap::from(values);
         assert_eq!(bh.len(), len);
         bh.storage.root.unwrap().assert_order();
     }
 
     #[test]
     fn from_iter() {
-        let bh: NodeBinaryHeap<u32, u32, u32> = (0..10).rev().collect();
+        let bh: NodeBinaryHeap<u32> = (0..10).rev().collect();
         bh.storage.root.unwrap().assert_order();
     }
 
     #[test]
     fn insert() {
-        let mut bh: NodeBinaryHeap<u32, u32, u32> = BinaryHeap::default();
+        let mut bh: NodeBinaryHeap<u32> = BinaryHeap::default();
         for i in (0..10).rev() {
             bh.insert(i);
             bh.storage.root.as_ref().unwrap().assert_order();
@@ -376,7 +376,7 @@ mod tests {
 
     #[test]
     fn pop() {
-        let mut bh: NodeBinaryHeap<u32, u32, u32> = (0..10).rev().collect();
+        let mut bh: NodeBinaryHeap<u32> = (0..10).rev().collect();
 
         for _ in 0..9 {
             bh.pop();
