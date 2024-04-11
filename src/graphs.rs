@@ -1,4 +1,9 @@
-use std::collections::{HashMap, VecDeque};
+use std::{
+    collections::{HashMap, VecDeque},
+    ops::Add,
+};
+
+use num_traits::Zero;
 
 /// A weighted, directed graph.
 #[derive(Clone, Debug)]
@@ -102,9 +107,42 @@ impl<W> Graph<W> {
         Some(weight)
     }
 
+    pub fn get_weight(&self, edge: (usize, usize)) -> Option<&W> {
+        let neighbor_idx = self.search_hash.get(&edge)?;
+        Some(&self.neighbors[edge.0].get(*neighbor_idx).as_ref()?.1)
+    }
+
     /// Get all neighbors and corresponding edge weights of a node.
-    pub fn neighbors(&self, node: usize) -> impl Iterator<Item = &(usize, W)> {
-        self.neighbors[node].iter()
+    pub fn out_neighbors(&self, node: usize) -> &[(usize, W)] {
+        &self.neighbors[node]
+    }
+
+    pub fn out_degree(&self, node: usize) -> usize {
+        self.out_neighbors(node).len()
+    }
+
+    pub fn in_neighbors(&self, node: usize) -> Vec<&(usize, W)> {
+        let mut out = vec![];
+
+        for i in 0..self.num_nodes() {
+            if let Some(&n) = self.search_hash.get(&(i, node)) {
+                out.push(&self.neighbors[i][n]);
+            }
+        }
+
+        out
+    }
+
+    pub fn in_degree(&self, node: usize) -> usize {
+        let mut count = 0;
+
+        for i in 0..self.num_nodes() {
+            if self.search_hash.contains_key(&(i, node)) {
+                count += 1;
+            }
+        }
+
+        count
     }
 
     /// Get the weight of an edge.
@@ -114,13 +152,13 @@ impl<W> Graph<W> {
     }
 
     pub fn breadth_first_search(&self, start: usize) -> Vec<usize> {
-        let mut out = vec![];
+        let mut out = Vec::with_capacity(self.num_nodes());
 
         let mut queue = VecDeque::new();
         queue.push_back(start);
 
         while let Some(u) = queue.pop_front() {
-            for (v, _) in self.neighbors(u) {
+            for (v, _) in self.out_neighbors(u) {
                 if !out.contains(v) {
                     queue.push_back(*v);
                     out.push(*v);
@@ -132,7 +170,7 @@ impl<W> Graph<W> {
     }
 
     fn dfs_recursion(&self, node: usize, visited: &mut [bool], out: &mut Vec<usize>) {
-        for (v, _) in self.neighbors(node) {
+        for (v, _) in self.out_neighbors(node) {
             if !visited[*v] {
                 visited[*v] = true;
                 self.dfs_recursion(*v, visited, out);
@@ -142,12 +180,79 @@ impl<W> Graph<W> {
     }
 
     pub fn depth_first_search(&self, start: usize) -> Vec<usize> {
-        let mut out = vec![];
+        let mut out = Vec::with_capacity(self.num_nodes());
         let mut visited = vec![false; self.num_nodes()];
 
         self.dfs_recursion(start, &mut visited, &mut out);
 
         out
+    }
+
+    fn topological_order(&self) -> Vec<usize> {
+        let mut out = Vec::with_capacity(self.num_nodes());
+        let mut in_degree: Vec<usize> = (0..self.num_nodes()).map(|i| self.in_degree(i)).collect();
+        let mut queue: VecDeque<usize> = in_degree
+            .iter()
+            .enumerate()
+            .filter(|(_, i)| **i == 0)
+            .map(|(i, _)| i)
+            .collect();
+
+        while let Some(v) = queue.pop_front() {
+            out.push(v);
+            for (w, _) in self.out_neighbors(v) {
+                if in_degree[*w] > 0 {
+                    in_degree[*w] -= 1;
+                } else {
+                    queue.push_back(*w);
+                }
+            }
+        }
+
+        out
+    }
+}
+
+impl<W> Graph<W>
+where
+    W: Add<W, Output = W> + Copy + PartialOrd + Zero + 'static,
+{
+    fn sssp_dag_rec(
+        &self,
+        node: usize,
+        orders: &[usize],
+        dist: &mut [Option<W>],
+        parents: &mut [usize],
+    ) {
+        let mut sorted: Vec<usize> = self
+            .out_neighbors(node)
+            .iter()
+            .map(|(i, _)| i)
+            .copied()
+            .collect();
+        sorted.sort_by(|i, j| orders[*i].cmp(&orders[*j]));
+
+        for neighbor in sorted {
+            let weight = *self.get_weight((node, neighbor)).unwrap();
+            let d_node = dist[node].unwrap();
+            let d_neighbor = dist[neighbor].unwrap_or(d_node + weight);
+            if d_neighbor > d_node + weight {
+                dist[neighbor] = Some(d_node + weight);
+            }
+        }
+
+        todo!()
+    }
+
+    pub fn sssp_dag(&self, start: usize) -> Vec<usize> {
+        let mut parents: Vec<usize> = (0..self.num_nodes()).collect();
+        let mut dist: Vec<Option<W>> = (0..self.num_nodes()).map(|_| None).collect();
+        dist[start] = Some(W::zero());
+        let order = self.topological_order();
+
+        self.sssp_dag_rec(start, &order, &mut dist, &mut parents);
+
+        parents
     }
 }
 

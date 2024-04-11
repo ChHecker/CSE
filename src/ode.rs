@@ -1,10 +1,6 @@
-use crate::{newton::newton, IntoMatrix, IntoVector, IterativeResult};
-use nalgebra::{
-    allocator::Allocator, Const, DefaultAllocator, DimMin, DimMinimum, OMatrix, RealField, SVector,
-    ToTypenum,
-};
+use crate::{newton::newton, IterativeResult};
 
-fn call<F: RealField + Copy, const D: usize, T: IntoVector<F, D>>(
+fn call<F: RealField + Copy, const D: usize, T: IntVector<F, D>>(
     f: &impl Fn(F, T) -> T,
     t: F,
     x: SVector<F, D>,
@@ -85,12 +81,7 @@ pub fn implicit_euler<const D: usize, V: IntoVector<f64, D>, M: IntoMatrix<f64, 
     y0: V,
     dt: f64,
     t_end: f64,
-) -> IterativeResult<Vec<V>>
-where
-    Const<D>: DimMin<Const<D>, Output = Const<D>> + ToTypenum,
-    DefaultAllocator: Allocator<f64, Const<D>, Const<D>>
-        + Allocator<(usize, usize), DimMinimum<Const<D>, Const<D>>>,
-{
+) -> IterativeResult<Vec<V>> {
     let n_steps = (t_end / dt) as usize;
 
     let t: Vec<f64> = (0..=n_steps + 1).map(|i| i as f64 * dt).collect();

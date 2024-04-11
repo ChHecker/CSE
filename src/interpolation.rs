@@ -1,4 +1,6 @@
-use std::f64::consts::PI;
+use std::{f64::consts::PI, ops::Range};
+
+use crate::fft::fft_oop_rec;
 
 #[derive(Clone, Debug)]
 pub enum NodeScheme {
@@ -278,10 +280,69 @@ impl CubicSpline {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct FourierInterpolation {
+    x: Range<f64>,
+    y: Vec<f64>,
+    gamma: Vec<Complex<f64>>,
+    exp: Complex<f64>,
+    num_values: usize,
+}
+
+impl FourierInterpolation {
+    pub fn new(x: Range<f64>, mut y: Vec<f64>) -> Self {
+        let num_values = y.len();
+
+        let pow2 = 2usize.pow(num_values.ilog2());
+
+        if num_values - pow2 != 0 {
+            y.resize(2 * pow2 - num_values, 0.);
+        }
+
+        let n = y.len();
+        let exp = (-Complex::i() * 2. * PI / n as f64).exp();
+
+        let gamma = fft_oop_rec(y.clone(), exp);
+
+        Self {
+            x,
+            y,
+            gamma,
+            exp,
+            num_values,
+        }
+    }
+
+    // TODO: Wrong
+    pub fn interpolate(&self, mut x: f64) -> Complex<f64> {
+        let period = self.x.end - self.x.start;
+
+        while x > self.x.end {
+            x -= period;
+        }
+        while x < self.x.start {
+            x += period;
+        }
+        x = (x - self.x.start) / period;
+
+        let n = self.y.len();
+        let exp = (Complex::i() * x).exp();
+        let sum: Complex<f64> = self
+            .gamma
+            .iter()
+            .enumerate()
+            .map(|(j, g)| g * exp.powi(-(j as i32)))
+            .sum();
+
+        sum / n as f64
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use approx::assert_abs_diff_eq;
+    use nalgebra::ComplexField;
 
     #[test]
     fn barycentric_lagrange_const() {
@@ -414,6 +475,42 @@ mod tests {
 
         for (xi, yi) in x.into_iter().zip(y) {
             assert_abs_diff_eq!(yi, xi.cos(), epsilon = 0.1);
+        }
+    }
+
+    #[test]
+    fn fourier_const() {
+        const D: usize = 8;
+        let y = vec![0.; D];
+
+        let bl = FourierInterpolation::new(0.0..1.0, y);
+
+        for x in 0..D - 1 {
+            let y = bl.interpolate(x as f64 / D as f64);
+            assert_eq!(y, Complex::new(0., 0.));
+        }
+    }
+
+    #[test]
+    fn fourier_cos() {
+        let upper = 1;
+        let d = upper * 10;
+        let x: Vec<f64> = (0..=d)
+            .map(|i| upper as f64 * i as f64 / d as f64)
+            .collect();
+        let y: Vec<f64> = x.iter().map(|xi| xi.cos()).collect();
+
+        let bl = FourierInterpolation::new(0.0..1.0, y);
+
+        let x: Vec<f64> = (0..=10 * d)
+            .map(|i| upper as f64 * i as f64 / (10 * d) as f64)
+            .collect();
+        let y: Vec<Complex<f64>> = x.iter().map(|xi| bl.interpolate(*xi)).collect();
+
+        dbg!(&y);
+
+        for (xi, yi) in x.into_iter().zip(y) {
+            assert_abs_diff_eq!(yi.real(), xi.cos(), epsilon = 0.1);
         }
     }
 }

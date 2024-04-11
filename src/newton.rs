@@ -1,21 +1,10 @@
-use nalgebra::{
-    allocator::Allocator, ArrayStorage, Const, DefaultAllocator, DimMin, DimMinimum, ToTypenum,
-};
-
-use crate::{linalg::solve::Lu, IntoMatrix, IntoVector, IterativeResult};
+use crate::{linalg::solve::Lu, IterativeResult};
 
 pub fn newton<const D: usize, V: IntoVector<f64, D>, M: IntoMatrix<f64, D>>(
     f: impl Fn(V) -> V,
     df: impl Fn(V) -> M,
     x0: V,
-) -> IterativeResult<V>
-where
-    Const<D>: DimMin<Const<D>, Output = Const<D>> + ToTypenum,
-    DefaultAllocator: Allocator<f64, Const<D>, Const<D>>
-        + Allocator<f64, Const<D>, Const<1>>
-        + Allocator<f64, Const<D>, Buffer = ArrayStorage<f64, D, 1>>
-        + Allocator<(usize, usize), DimMinimum<Const<D>, Const<D>>>,
-{
+) -> IterativeResult<V> {
     let nmax = 100;
     let epsilon = 1e-8;
 

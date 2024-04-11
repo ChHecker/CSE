@@ -1,0 +1,416 @@
+use super::*;
+
+macro_rules! view_storage {
+    ($struct:ident, $mutability:tt) => {
+        #[derive(Debug, PartialEq, Eq)]
+        pub struct $struct<'a, T, R: Dim, C: Dim> {
+            pointer: *$mutability T,
+            rows: R,
+            columns: C,
+            phantom: PhantomData<&'a T>,
+        }
+
+        impl<'a, T, R: Dim, C: Dim> RawStorage<T, R, C> for $struct<'a, T, R, C> {
+            fn shape(&self) -> (R, C) {
+                (self.rows, self.columns)
+            }
+
+            #[inline(always)]
+            fn assert_same_shape<R2, C2, S2>(&self, other: &S2)
+            where
+                R2: SameDim<R>,
+                C2: SameDim<C>,
+                S2: Storage<T, R2, C2>,
+            {
+                let (rows_a, columns_a) = self.shape();
+                let (rows_b, columns_b) = other.shape();
+                let same_shape = rows_a.dim() == rows_b.dim() && columns_a.dim() == columns_b.dim();
+
+                assert!(
+                    same_shape,
+                    "Invalid shape: Expected same dimensions\nLeft-hand side: ({}, {}), right-hand side: ({}, {})",
+                    rows_a.dim(),
+                    columns_a.dim(),
+                    rows_b.dim(),
+                    columns_b.dim()
+                )
+            }
+
+            fn row(&self, index: usize) -> RowVectorView<'a, T, C> {
+                assert!(index < self.rows.dim(), "Index out of bounds");
+
+                unsafe {
+                    RowVector::from_data_unchecked(ViewStorage::new_unchecked(
+                        &*self.pointer.add(index * self.columns.dim()),
+                        Const,
+                        self.columns,
+                    ))
+                }
+            }
+        }
+
+        impl<'a, T, R: Dim, C: Dim> StorageIterator<T, R, C> for $struct<'a, T, R, C> {
+            type Iter<'b> = Iter<'b, T, R, C>
+            where
+                'a: 'b,
+                T: 'b;
+
+            type RowIter<'b> = RowIter<'b, T, R, C>
+            where
+                'a: 'b,
+                T: 'b;
+
+            fn iter(&self) -> Iter<'_, T, R, C> {
+                Iter {
+                    view:
+                        ViewStorage {
+                            pointer: self.pointer as *const T,
+                            rows: self.rows,
+                            columns: self.columns,
+                            phantom: PhantomData
+                    },
+                    index: 0,
+                }
+            }
+
+            fn row_iter(&self) -> RowIter<'_, T, R, C> {
+                RowIter {
+                    view:
+                        ViewStorage {
+                            pointer: self.pointer as *const T,
+                            rows: self.rows,
+                            columns: self.columns,
+                            phantom: PhantomData
+                    },
+                    index: 0,
+                }
+            }
+        }
+
+
+        impl<'a, T, R: Dim, C: Dim> Index<[usize; 2]> for $struct<'a, T, R, C> {
+            type Output = T;
+
+            fn index(&self, index: [usize; 2]) -> &T {
+                assert!(index[0] < self.rows.dim(), "Row index out of bounds");
+                assert!(index[1] < self.columns.dim(), "Column index out of bounds");
+
+                unsafe { &*self.pointer.add(index[0] * self.columns.dim() + index[1]) }
+            }
+        }
+
+        impl<'a, T, R: Dim, C: Dim> Index<usize> for $struct<'a, T, R, C> {
+            type Output = T;
+
+            fn index(&self, index: usize) -> &T {
+                assert!(
+                    index < self.rows.dim() * self.columns.dim(),
+                    "Index out of bounds"
+                );
+
+                unsafe { &*self.pointer.add(index) }
+            }
+        }
+    };
+}
+
+pub struct Iter<'a, T, R: Dim, C: Dim> {
+    view: ViewStorage<'a, T, R, C>,
+    index: usize,
+}
+
+impl<'a, T, R: Dim, C: Dim> Iterator for Iter<'a, T, R, C> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.view.rows.dim() * self.view.columns.dim() {
+            return None;
+        }
+        let ret = unsafe { &*self.view.pointer.add(self.index) };
+
+        self.index += 1;
+        Some(ret)
+    }
+}
+
+pub struct RowIter<'a, T, R: Dim, C: Dim> {
+    view: ViewStorage<'a, T, R, C>,
+    index: usize,
+}
+
+impl<'a, T, R: Dim, C: Dim> Iterator for RowIter<'a, T, R, C> {
+    type Item = RowVectorView<'a, T, C>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.view.rows.dim() {
+            return None;
+        }
+        let ret = unsafe {
+            RowVector::from_data_unchecked(ViewStorage::new_unchecked(
+                &*self.view.pointer.add(self.index * self.view.columns.dim()),
+                Const,
+                self.view.columns,
+            ))
+        };
+        self.index += 1;
+
+        Some(ret)
+    }
+}
+
+view_storage!(ViewStorage, const);
+
+impl<'a, T, R: Dim, C: Dim> ViewStorage<'a, T, R, C> {
+    /// Create a new slice storage without checking for correct vec length.
+    ///
+    /// # Safety
+    /// Providing a vector whose length is not equal `rows * columns` is undefined behavior.
+    pub unsafe fn new_unchecked(start: &'a T, rows: R, columns: C) -> Self {
+        Self {
+            pointer: start as *const T,
+            rows,
+            columns,
+            phantom: PhantomData,
+        }
+    }
+}
+
+view_storage!(ViewStorageMut, mut);
+
+impl<'a, T, R: Dim, C: Dim> ViewStorageMut<'a, T, R, C> {
+    /// Create a new slice storage without checking for correct vec length.
+    ///
+    /// # Safety
+    /// Providing a vector whose length is not equal `rows * columns` is undefined behavior.
+    pub unsafe fn new_unchecked(start: &'a mut T, rows: R, columns: C) -> Self {
+        Self {
+            pointer: start as *mut T,
+            rows,
+            columns,
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<'a, T, R: Dim, C: Dim> RawStorageMut<T, R, C> for ViewStorageMut<'a, T, R, C> {
+    fn row_mut(&mut self, index: usize) -> RowVectorViewMut<'a, T, C> {
+        assert!(index < self.rows.dim(), "Index out of bounds");
+
+        unsafe {
+            RowVector::from_data_unchecked(ViewStorageMut::new_unchecked(
+                &mut *self.pointer.add(index * self.columns.dim()),
+                Const,
+                self.columns,
+            ))
+        }
+    }
+}
+
+impl<'a, T, R: Dim, C: Dim> StorageIteratorMut<T, R, C> for ViewStorageMut<'a, T, R, C> {
+    type IterMut<'b> = IterMut<'b, T, R, C>
+    where
+        'a: 'b,
+        T: 'b;
+
+    type RowIterMut<'b> = RowIterMut<'b, T, R, C>
+    where
+        'a: 'b,
+        T: 'b;
+
+    fn iter_mut(&mut self) -> IterMut<'_, T, R, C> {
+        IterMut {
+            view: ViewStorageMut {
+                pointer: self.pointer,
+                rows: self.rows,
+                columns: self.columns,
+                phantom: PhantomData,
+            },
+            index: 0,
+        }
+    }
+
+    fn row_iter_mut(&mut self) -> RowIterMut<'_, T, R, C> {
+        RowIterMut {
+            view: ViewStorageMut {
+                pointer: self.pointer,
+                rows: self.rows,
+                columns: self.columns,
+                phantom: PhantomData,
+            },
+            index: 0,
+        }
+    }
+}
+
+pub struct IterMut<'a, T, R: Dim, C: Dim> {
+    view: ViewStorageMut<'a, T, R, C>,
+    index: usize,
+}
+
+impl<'a, T, R: Dim, C: Dim> Iterator for IterMut<'a, T, R, C> {
+    type Item = &'a mut T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.view.rows.dim() * self.view.columns.dim() {
+            return None;
+        }
+        let ret = unsafe { &mut *self.view.pointer.add(self.index) };
+
+        self.index += 1;
+        Some(ret)
+    }
+}
+
+pub struct RowIterMut<'a, T, R: Dim, C: Dim> {
+    view: ViewStorageMut<'a, T, R, C>,
+    index: usize,
+}
+
+impl<'a, T, R: Dim, C: Dim> Iterator for RowIterMut<'a, T, R, C> {
+    type Item = RowVectorViewMut<'a, T, C>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.view.rows.dim() {
+            return None;
+        }
+        let ret = unsafe {
+            RowVector::from_data_unchecked(ViewStorageMut::new_unchecked(
+                &mut *self.view.pointer.add(self.index * self.view.columns.dim()),
+                Const,
+                self.view.columns,
+            ))
+        };
+
+        self.index += 1;
+        Some(ret)
+    }
+}
+
+impl<'a, T, R: Dim, C: Dim> IndexMut<[usize; 2]> for ViewStorageMut<'a, T, R, C> {
+    fn index_mut(&mut self, index: [usize; 2]) -> &mut T {
+        assert!(index[0] < self.rows.dim(), "Row index out of bounds");
+        assert!(index[1] < self.columns.dim(), "Column index out of bounds");
+
+        unsafe { &mut *self.pointer.add(index[0] * self.columns.dim() + index[1]) }
+    }
+}
+
+impl<'a, T, R: Dim, C: Dim> IndexMut<usize> for ViewStorageMut<'a, T, R, C> {
+    fn index_mut(&mut self, index: usize) -> &mut T {
+        assert!(
+            index < self.rows.dim() * self.columns.dim(),
+            "Index out of bounds"
+        );
+
+        unsafe { &mut *self.pointer.add(index) }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn index() {
+        let arr = [[1, 2, 3], [4, 5, 6]];
+        let view: ViewStorage<'_, i32, Const<2>, Const<3>> =
+            unsafe { ViewStorage::new_unchecked(&arr[0][0], Const, Const) };
+
+        assert_eq!(view[0], 1);
+        assert_eq!(view[1], 2);
+        assert_eq!(view[2], 3);
+        assert_eq!(view[3], 4);
+        assert_eq!(view[4], 5);
+        assert_eq!(view[5], 6);
+
+        assert_eq!(view[[0, 0]], 1);
+        assert_eq!(view[[0, 1]], 2);
+        assert_eq!(view[[0, 2]], 3);
+        assert_eq!(view[[1, 0]], 4);
+        assert_eq!(view[[1, 1]], 5);
+        assert_eq!(view[[1, 2]], 6);
+    }
+
+    #[test]
+    #[should_panic]
+    fn index_out_of_bounds() {
+        let arr = [[1, 2, 3], [4, 5, 6]];
+        let view: ViewStorage<'_, i32, Const<2>, Const<3>> =
+            unsafe { ViewStorage::new_unchecked(&arr[0][0], Const, Const) };
+
+        let _ = view[6];
+    }
+
+    #[test]
+    #[should_panic]
+    fn index_2d_out_of_bounds() {
+        let arr = [[1, 2, 3], [4, 5, 6]];
+        let view: ViewStorage<'_, i32, Const<2>, Const<3>> =
+            unsafe { ViewStorage::new_unchecked(&arr[0][0], Const, Const) };
+
+        let _ = view[[arr.len(), 0]];
+    }
+
+    #[test]
+    fn index_mut() {
+        let mut arr = [[1, 2, 3], [4, 5, 6]];
+        let view: ViewStorageMut<'_, i32, Const<2>, Const<3>> =
+            unsafe { ViewStorageMut::new_unchecked(&mut arr[0][0], Const, Const) };
+
+        assert_eq!(view[0], 1);
+        assert_eq!(view[1], 2);
+        assert_eq!(view[2], 3);
+        assert_eq!(view[3], 4);
+        assert_eq!(view[4], 5);
+        assert_eq!(view[5], 6);
+
+        assert_eq!(view[[0, 0]], 1);
+        assert_eq!(view[[0, 1]], 2);
+        assert_eq!(view[[0, 2]], 3);
+        assert_eq!(view[[1, 0]], 4);
+        assert_eq!(view[[1, 1]], 5);
+        assert_eq!(view[[1, 2]], 6);
+    }
+
+    #[test]
+    fn iter() {
+        let arr = [[1, 2, 3], [4, 5, 6]];
+        let view: ViewStorage<'_, i32, Const<2>, Const<3>> =
+            unsafe { ViewStorage::new_unchecked(&arr[0][0], Const, Const) };
+        let mut iter = view.iter();
+
+        assert_eq!(iter.next(), Some(&1));
+        assert_eq!(iter.next(), Some(&2));
+        assert_eq!(iter.next(), Some(&3));
+        assert_eq!(iter.next(), Some(&4));
+        assert_eq!(iter.next(), Some(&5));
+        assert_eq!(iter.next(), Some(&6));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn iter_mut() {
+        let mut arr = [[1, 2, 3], [4, 5, 6]];
+        let mut view: ViewStorageMut<'_, i32, Const<2>, Const<3>> =
+            unsafe { ViewStorageMut::new_unchecked(&mut arr[0][0], Const, Const) };
+        let mut iter = view.iter_mut();
+
+        assert_eq!(iter.next(), Some(&mut 1));
+        assert_eq!(iter.next(), Some(&mut 2));
+        assert_eq!(iter.next(), Some(&mut 3));
+        assert_eq!(iter.next(), Some(&mut 4));
+        assert_eq!(iter.next(), Some(&mut 5));
+        assert_eq!(iter.next(), Some(&mut 6));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn row_iter() {
+        let arr = [[1, 2, 3], [4, 5, 6]];
+        let view: ViewStorage<'_, i32, Const<2>, Const<3>> =
+            unsafe { ViewStorage::new_unchecked(&arr[0][0], Const, Const) };
+        let mut iter = view.row_iter();
+
+        dbg!(iter.next());
+    }
+}

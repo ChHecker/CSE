@@ -1,4 +1,7 @@
-use nalgebra::{allocator::Allocator, Const, DefaultAllocator, Dim, OMatrix, OVector};
+use crate::matrix::{
+    storage::{Allocator, DefaultAllocator},
+    Const, Dim, OMatrix, OVector,
+};
 
 /* L x = b
  *
@@ -8,7 +11,7 @@ use nalgebra::{allocator::Allocator, Const, DefaultAllocator, Dim, OMatrix, OVec
  */
 fn forward_substitution<D: Dim>(l: &OMatrix<f64, D, D>, b: OVector<f64, D>) -> OVector<f64, D>
 where
-    DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>,
+    DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D, Const<1>>,
 {
     let n = l.shape().0;
 
@@ -54,8 +57,7 @@ where
 #[derive(Clone, Debug)]
 pub struct Lu<D: Dim>
 where
-    DefaultAllocator:
-        Allocator<f64, D, D> + Allocator<f64, D, Const<1>> + Allocator<f64, Const<1>, D>,
+    DefaultAllocator: Allocator<f64, D, D>,
 {
     pub l: OMatrix<f64, D, D>,
     pub u: OMatrix<f64, D, D>,
@@ -75,7 +77,7 @@ where
         let mut u = a;
 
         for i in 0..n {
-            let current_row = u.row(i).clone_owned();
+            let current_row = u.row(i).to_owned();
             let pivot_element = current_row[i];
 
             for (j, mut row) in u.row_iter_mut().enumerate().skip(i + 1) {
@@ -101,8 +103,7 @@ where
 #[derive(Clone, Debug)]
 pub struct Qr<D: Dim>
 where
-    DefaultAllocator:
-        Allocator<f64, D, D> + Allocator<f64, D, Const<1>> + Allocator<f64, Const<1>, D>,
+    DefaultAllocator: Allocator<f64, D, D>,
 {
     pub q: OMatrix<f64, D, D>,
     pub r: OMatrix<f64, D, D>,
@@ -131,8 +132,8 @@ where
                 &(col_view + col_view[0].signum() * goal.view((i, 0), (n - i, 1))).normalize(),
             );
 
-            r -= 2. * &v * (v.transpose() * &r);
-            q -= 2. * (&q * &v) * v.transpose();
+            r -= 2. * &v.dot(&v.transpose().dot(&r));
+            q -= 2. * q.dot(&v).dot(&v.transpose());
         }
 
         Self { q, r }
@@ -140,15 +141,16 @@ where
 
     /// Solve the equation $QRx = b$.
     pub fn solve(&self, b: &OVector<f64, D>) -> Option<OVector<f64, D>> {
-        backward_substitution(&self.r, self.q.transpose() * b)
+        backward_substitution(&self.r, self.q.transpose().dot(b))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::{mat, matrix::SMatrix, vector};
+
     use super::*;
     use approx::assert_abs_diff_eq;
-    use nalgebra::{Matrix3, SMatrix, Vector3};
     use rand::Rng;
 
     #[test]
@@ -184,19 +186,17 @@ mod tests {
     #[test]
     fn lu_solve_consistency() {
         let mut rng = rand::thread_rng();
-        let l = Matrix3::new(1., 0., 0., rng.gen(), 1., 0., rng.gen(), rng.gen(), 1.);
-        let u = Matrix3::new(
-            rng.gen(),
-            rng.gen(),
-            rng.gen(),
-            0.,
-            rng.gen(),
-            rng.gen(),
-            0.,
-            0.,
-            rng.gen(),
-        );
-        let b = Vector3::new_random();
+        let l = mat![
+            [1., 0., 0.],
+            [rng.gen(), 1., 0.],
+            [rng.gen(), rng.gen(), 1.]
+        ];
+        let u = mat![
+            [rng.gen(), rng.gen(), rng.gen()],
+            [0., rng.gen(), rng.gen()],
+            [0., 0., rng.gen()],
+        ];
+        let b = vector![rng.gen(), rng.gen(), rng.gen()];
 
         let lu = Lu { l, u };
         let x = lu.solve(&b).unwrap();
