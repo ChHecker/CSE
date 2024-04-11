@@ -9,7 +9,6 @@ pub mod interpolation;
 pub mod linalg;
 pub mod newton;
 pub mod ode;
-pub mod parser;
 pub mod quadrature;
 pub mod sorting;
 
