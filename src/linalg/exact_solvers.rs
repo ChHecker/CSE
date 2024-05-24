@@ -1,4 +1,6 @@
 use nalgebra::{allocator::Allocator, Const, DefaultAllocator, Dim, OMatrix, OVector};
+use num_traits::Zero;
+use twofloat::TwoFloat;
 
 /* L x = b
  *
@@ -49,6 +51,24 @@ where
     }
 
     Some(x)
+}
+
+fn double_double_matrix_mul<D: Dim>(a: &OMatrix<f64, D, D>, x: &OVector<f64, D>) -> OVector<f64, D>
+where
+    DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D, Const<1>>,
+{
+    let dim = x.shape().0;
+    let mut out = OVector::zeros_generic(x.shape_generic().0, Const);
+
+    for i in 0..dim {
+        let mut sum = TwoFloat::zero();
+        for j in 0..dim {
+            sum += TwoFloat::new_mul(a[(i, j)], x[j]);
+        }
+        out[i] = sum.into();
+    }
+
+    out
 }
 
 #[derive(Clone, Debug)]
@@ -103,7 +123,7 @@ where
 
         let mut cond = epsilon + 1.;
         while cond > epsilon {
-            let res = b - &self.a * &x;
+            let res = b - double_double_matrix_mul(&self.a, &x);
             let z = self.solve(&res)?;
             x += &z;
             cond = z.norm() / x.norm();
@@ -163,12 +183,21 @@ where
 mod tests {
     use super::*;
     use approx::assert_abs_diff_eq;
-    use nalgebra::{Matrix3, SMatrix, Vector3};
+    use nalgebra::{Matrix3, Matrix6, SMatrix, Vector3, Vector6};
     use rand::Rng;
 
     fn random_pos_def_matrix() -> Matrix3<f64> {
         let rand: Matrix3<f64> = Matrix3::new_random();
         0.5 * (rand + rand.transpose()) + 3. * Matrix3::identity()
+    }
+
+    #[test]
+    fn test_double_double_matrix_mul() {
+        let a: Matrix6<f64> = 1e6 * Matrix6::new_random();
+        let x: Vector6<f64> = 1e6 * Vector6::new_random();
+        let b_double = a * x;
+        let b_double_double = double_double_matrix_mul(&a, &x);
+        assert_ne!(b_double, b_double_double);
     }
 
     #[test]
