@@ -17,6 +17,9 @@ fn linalg_benchmark(c: &mut Criterion) {
     let lu = Lu::new(a).unwrap();
     let qr = Qr::new(a);
     c.bench_function("lu solution", |b| b.iter(|| lu.solve(&y)));
+    c.bench_function("lu solution + refinement", |b| {
+        b.iter(|| lu.solve_refine(&y, 1e-6))
+    });
     c.bench_function("qr solution", |b| b.iter(|| qr.solve(&y)));
 }
 

@@ -166,6 +166,11 @@ mod tests {
     use nalgebra::{Matrix3, SMatrix, Vector3};
     use rand::Rng;
 
+    fn random_pos_def_matrix() -> Matrix3<f64> {
+        let rand: Matrix3<f64> = Matrix3::new_random();
+        0.5 * (rand + rand.transpose()) + 3. * Matrix3::identity()
+    }
+
     #[test]
     fn lu_structure() {
         const D: usize = 5;
@@ -224,6 +229,24 @@ mod tests {
     }
 
     #[test]
+    fn lu_solve() {
+        let a = random_pos_def_matrix();
+        let b: Vector3<f64> = Vector3::new_random();
+        let lu = Lu::new(a).unwrap();
+        let x = lu.solve(&b).unwrap();
+        assert!((a * x - b).norm() < 1e-6);
+    }
+
+    #[test]
+    fn lu_solve_refine() {
+        let a = random_pos_def_matrix();
+        let b: Vector3<f64> = Vector3::new_random();
+        let lu = Lu::new(a).unwrap();
+        let x = lu.solve_refine(&b, 1e-6).unwrap();
+        assert!((a * x - b).norm() < 1e-6);
+    }
+
+    #[test]
     fn qr_structure() {
         const D: usize = 5;
         let a: SMatrix<f64, D, D> = 100. * SMatrix::new_random();
@@ -272,5 +295,14 @@ mod tests {
         let x = qr.solve(&b).unwrap();
         let c = q * r * x;
         assert_abs_diff_eq!(c, b, epsilon = 1e-8);
+    }
+
+    #[test]
+    fn qr_solve() {
+        let a = random_pos_def_matrix();
+        let b: Vector3<f64> = Vector3::new_random();
+        let lu = Qr::new(a);
+        let x = lu.solve(&b).unwrap();
+        assert!((a * x - b).norm() < 1e-6);
     }
 }
