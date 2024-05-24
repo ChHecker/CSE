@@ -1,2 +1,3 @@
 pub mod eigen;
-pub mod solve;
+pub mod exact_solvers;
+pub mod iterative_solvers;

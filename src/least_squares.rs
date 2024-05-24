@@ -1,6 +1,6 @@
 use nalgebra::{allocator::Allocator, Const, DefaultAllocator, Dim, OMatrix, OVector};
 
-use crate::linalg::solve::Lu;
+use crate::linalg::exact_solvers::Lu;
 
 pub fn linear<N: Dim, M: Dim>(
     a: &OMatrix<f64, N, M>,
@@ -19,6 +19,8 @@ where
     let lu = Lu::new(lhs)?;
     lu.solve_refine(&rhs, epsilon)
 }
+
+// TODO: Gauss-Newton
 
 #[cfg(test)]
 mod tests {

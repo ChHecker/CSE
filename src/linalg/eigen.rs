@@ -1,7 +1,7 @@
 use nalgebra::{allocator::Allocator, Const, DefaultAllocator, Dim, OMatrix, OVector};
 
 use crate::{
-    linalg::solve::{Lu, Qr},
+    linalg::exact_solvers::{Lu, Qr},
     IterativeResult,
 };
 

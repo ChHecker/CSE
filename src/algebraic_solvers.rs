@@ -2,14 +2,14 @@ use nalgebra::{
     allocator::Allocator, ArrayStorage, Const, DefaultAllocator, DimMin, DimMinimum, ToTypenum,
 };
 
-use crate::{linalg::solve::Lu, IntoMatrix, IntoVector, IterativeResult};
+use crate::{linalg::exact_solvers::Lu, IntoMatrix, IntoVector, IterativeResult};
 
 pub fn newton<const D: usize, V: IntoVector<f64, D>, M: IntoMatrix<f64, D>>(
     f: impl Fn(V) -> V,
     df: impl Fn(V) -> M,
     x0: V,
-    nmax: u32,
     epsilon: f64,
+    nmax: u32,
 ) -> IterativeResult<V>
 where
     Const<D>: DimMin<Const<D>, Output = Const<D>> + ToTypenum,
@@ -52,8 +52,8 @@ pub fn modified_newton<const D: usize, V: IntoVector<f64, D>, M: IntoMatrix<f64,
     f: impl Fn(V) -> V,
     df: impl Fn(V) -> M,
     x0: V,
-    nmax: u32,
     epsilon: f64,
+    nmax: u32,
     lambda_min: f64,
 ) -> IterativeResult<V>
 where
@@ -136,7 +136,7 @@ mod tests {
         let f = |x: f64| x.powi(3) - 3.;
         let df = |x: f64| 3. * x.powi(2);
 
-        let n = newton(f, df, 1., 100, 1e-8).unwrap();
+        let n = newton(f, df, 1., 1e-8, 100).unwrap();
         assert_abs_diff_eq!(n, 3f64.powf(1. / 3.), epsilon = 1e-8);
     }
 
@@ -145,7 +145,7 @@ mod tests {
         let f = |x: f64| x.powi(3) - 3.;
         let df = |x: f64| 3. * x.powi(2);
 
-        let n = modified_newton(f, df, 1., 100, 1e-8, 1e-2).unwrap();
+        let n = modified_newton(f, df, 1., 1e-8, 100, 1e-2).unwrap();
         assert_abs_diff_eq!(n, 3f64.powf(1. / 3.), epsilon = 1e-8);
     }
 }

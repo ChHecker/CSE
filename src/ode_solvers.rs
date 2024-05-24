@@ -104,8 +104,8 @@ where
                     - df(t[i], V::from_vector(x)).into_matrix() * dt
             },
             y[i],
-            100,
             1e-8,
+            100,
         ) {
             IterativeResult::Converged(y) => y,
             IterativeResult::MaxIterations(_) => {
