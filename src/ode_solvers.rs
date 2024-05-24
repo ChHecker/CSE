@@ -1,4 +1,4 @@
-use crate::{newton::newton, IntoMatrix, IntoVector, IterativeResult};
+use crate::{algebraic_solvers::newton, IntoMatrix, IntoVector, IterativeResult};
 use nalgebra::{
     allocator::Allocator, Const, DefaultAllocator, DimMin, DimMinimum, OMatrix, RealField, SVector,
     ToTypenum,
@@ -104,6 +104,8 @@ where
                     - df(t[i], V::from_vector(x)).into_matrix() * dt
             },
             y[i],
+            100,
+            1e-8,
         ) {
             IterativeResult::Converged(y) => y,
             IterativeResult::MaxIterations(_) => {
