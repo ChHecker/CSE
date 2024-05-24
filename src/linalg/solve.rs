@@ -59,6 +59,7 @@ where
 {
     pub l: OMatrix<f64, D, D>,
     pub u: OMatrix<f64, D, D>,
+    a: OMatrix<f64, D, D>,
 }
 
 impl<D: Dim> Lu<D>
@@ -72,7 +73,7 @@ where
         let n_gen = a.shape_generic().0;
 
         let mut l = OMatrix::<f64, D, D>::identity_generic(n_gen, n_gen);
-        let mut u = a;
+        let mut u = a.clone();
 
         for i in 0..n {
             let current_row = u.row(i).clone_owned();
@@ -88,13 +89,27 @@ where
             }
         }
 
-        Some(Self { l, u })
+        Some(Self { a, l, u })
     }
 
     /// Solve the equation $LUx = b$.
     pub fn solve(&self, b: &OVector<f64, D>) -> Option<OVector<f64, D>> {
         let y = forward_substitution(&self.l, b.clone());
         backward_substitution(&self.u, y.clone())
+    }
+
+    pub fn solve_refine(&self, b: &OVector<f64, D>, epsilon: f64) -> Option<OVector<f64, D>> {
+        let mut x = self.solve(b)?;
+
+        let mut cond = epsilon + 1.;
+        while cond > epsilon {
+            let res = b - &self.a * &x;
+            let z = self.solve(&res)?;
+            x += &z;
+            cond = z.norm() / x.norm();
+        }
+
+        Some(x)
     }
 }
 
@@ -198,7 +213,11 @@ mod tests {
         );
         let b = Vector3::new_random();
 
-        let lu = Lu { l, u };
+        let lu = Lu {
+            l,
+            u,
+            a: SMatrix::identity(),
+        };
         let x = lu.solve(&b).unwrap();
         let c = l * u * x;
         assert_abs_diff_eq!(c, b, epsilon = 1e-8);

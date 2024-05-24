@@ -7,6 +7,7 @@ pub(crate) mod csv;
 pub mod fft;
 pub mod graphs;
 pub mod interpolation;
+pub mod least_squares;
 pub mod linalg;
 pub mod ode_solvers;
 pub mod quadrature;
