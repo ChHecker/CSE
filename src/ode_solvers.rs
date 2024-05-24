@@ -91,6 +91,7 @@ where
     DefaultAllocator: Allocator<f64, Const<D>, Const<D>>
         + Allocator<(usize, usize), DimMinimum<Const<D>, Const<D>>>,
 {
+    let mut iterations = 0;
     let n_steps = (t_end / dt) as usize;
 
     let t: Vec<f64> = (0..=n_steps + 1).map(|i| i as f64 * dt).collect();
@@ -107,7 +108,13 @@ where
             1e-8,
             100,
         ) {
-            IterativeResult::Converged(y) => y,
+            IterativeResult::Converged {
+                result: y,
+                iterations: n,
+            } => {
+                iterations = n;
+                y
+            }
             IterativeResult::MaxIterations(_) => {
                 return IterativeResult::MaxIterations(
                     y[0..i]
@@ -126,7 +133,10 @@ where
         }
     }
 
-    IterativeResult::Converged(y.into_iter().map(|elem| V::from_vector(elem)).collect())
+    IterativeResult::Converged {
+        result: y.into_iter().map(|elem| V::from_vector(elem)).collect(),
+        iterations,
+    }
 }
 
 #[cfg(test)]

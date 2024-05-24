@@ -44,7 +44,10 @@ where
     if n == nmax {
         IterativeResult::MaxIterations(a)
     } else {
-        IterativeResult::Converged(a)
+        IterativeResult::Converged {
+            result: a,
+            iterations: n,
+        }
     }
 }
 
@@ -122,7 +125,10 @@ where
     if n == nmax {
         IterativeResult::MaxIterations(x_1)
     } else {
-        IterativeResult::Converged(x_1)
+        IterativeResult::Converged {
+            result: x_1,
+            iterations: n,
+        }
     }
 }
 

@@ -38,7 +38,10 @@ where
     if n == nmax {
         IterativeResult::MaxIterations(x)
     } else {
-        IterativeResult::Converged(x)
+        IterativeResult::Converged {
+            result: x,
+            iterations: n,
+        }
     }
 }
 
@@ -95,7 +98,78 @@ where
     if n == nmax {
         IterativeResult::MaxIterations(x)
     } else {
-        IterativeResult::Converged(x)
+        IterativeResult::Converged {
+            result: x,
+            iterations: n,
+        }
+    }
+}
+
+pub fn gradient<D: Dim>(
+    a: &OMatrix<f64, D, D>,
+    b: &OVector<f64, D>,
+    x0: OVector<f64, D>,
+    epsilon: f64,
+    nmax: u32,
+) -> IterativeResult<OVector<f64, D>>
+where
+    DefaultAllocator:
+        Allocator<f64, D, D> + Allocator<f64, D, Const<1>> + Allocator<f64, Const<1>, D>,
+{
+    let mut n = 0;
+    let mut res_norm = epsilon + 1.;
+    let mut x = x0;
+
+    while res_norm > epsilon && n < nmax {
+        let res = b - a * &x;
+        let alpha = res.norm_squared() / (res.tr_mul(a) * &res)[0];
+        x += alpha * &res;
+
+        res_norm = res.norm();
+        n += 1;
+    }
+
+    if n == nmax {
+        IterativeResult::MaxIterations(x)
+    } else {
+        IterativeResult::Converged {
+            result: x,
+            iterations: n,
+        }
+    }
+}
+
+pub fn conjugate_gradient<D: Dim>(
+    a: &OMatrix<f64, D, D>,
+    b: &OVector<f64, D>,
+    x0: OVector<f64, D>,
+    epsilon: f64,
+    nmax: u32,
+) -> IterativeResult<OVector<f64, D>>
+where
+    DefaultAllocator:
+        Allocator<f64, D, D> + Allocator<f64, D, Const<1>> + Allocator<f64, Const<1>, D>,
+{
+    let mut n = 0;
+    let mut res_norm = epsilon + 1.;
+    let mut x = x0;
+
+    while res_norm > epsilon && n < nmax {
+        let res = b - a * &x;
+        let alpha = res.norm_squared() / (res.tr_mul(a) * &res)[0];
+        x += alpha * &res;
+
+        res_norm = res.norm();
+        n += 1;
+    }
+
+    if n == nmax {
+        IterativeResult::MaxIterations(x)
+    } else {
+        IterativeResult::Converged {
+            result: x,
+            iterations: n,
+        }
     }
 }
 
@@ -123,6 +197,14 @@ mod tests {
         let a = random_pos_def_matrix();
         let b: Vector3<f64> = Vector3::new_random();
         let x = successive_overrelaxation(&a, &b, Vector3::zeros(), 1e-6, 100, 1.7);
+        assert!(x.is_converged())
+    }
+
+    #[test]
+    fn test_gradient() {
+        let a = random_pos_def_matrix();
+        let b: Vector3<f64> = Vector3::new_random();
+        let x = gradient(&a, &b, Vector3::zeros(), 1e-6, 100);
         assert!(x.is_converged())
     }
 }

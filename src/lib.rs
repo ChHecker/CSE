@@ -64,7 +64,7 @@ impl<T: RealField + Copy, const D: usize> IntoMatrix<T, D> for OMatrix<T, Const<
 }
 
 pub enum IterativeResult<V> {
-    Converged(V),
+    Converged { result: V, iterations: u32 },
     MaxIterations(V),
     Failed,
 }
@@ -72,7 +72,10 @@ pub enum IterativeResult<V> {
 impl<V> IterativeResult<V> {
     pub fn unwrap(self) -> V {
         match self {
-            IterativeResult::Converged(v) => v,
+            IterativeResult::Converged {
+                result,
+                iterations: _,
+            } => result,
             IterativeResult::MaxIterations(v) => v,
             IterativeResult::Failed => panic!("called unwrap on Failed"),
         }
@@ -80,7 +83,10 @@ impl<V> IterativeResult<V> {
 
     pub fn successful_or<E>(self, err: E) -> Result<V, E> {
         match self {
-            IterativeResult::Converged(v) => Ok(v),
+            IterativeResult::Converged {
+                result,
+                iterations: _,
+            } => Ok(result),
             IterativeResult::MaxIterations(v) => Ok(v),
             IterativeResult::Failed => Err(err),
         }
@@ -88,7 +94,10 @@ impl<V> IterativeResult<V> {
 
     pub fn converged_or<E>(self, err: E) -> Result<V, E> {
         match self {
-            IterativeResult::Converged(v) => Ok(v),
+            IterativeResult::Converged {
+                result,
+                iterations: _,
+            } => Ok(result),
             IterativeResult::MaxIterations(_) => Err(err),
             IterativeResult::Failed => Err(err),
         }
@@ -96,14 +105,21 @@ impl<V> IterativeResult<V> {
 
     pub fn is_converged(&self) -> bool {
         match &self {
-            IterativeResult::Converged(_) => true,
+            IterativeResult::Converged {
+                result: _,
+                iterations: _,
+            } => true,
             IterativeResult::MaxIterations(_) | IterativeResult::Failed => false,
         }
     }
 
     pub fn is_successful(&self) -> bool {
         match &self {
-            IterativeResult::Converged(_) | IterativeResult::MaxIterations(_) => true,
+            IterativeResult::Converged {
+                result: _,
+                iterations: _,
+            }
+            | IterativeResult::MaxIterations(_) => true,
             IterativeResult::Failed => false,
         }
     }

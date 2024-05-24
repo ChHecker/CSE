@@ -9,6 +9,7 @@ pub fn power_iteration<D: Dim>(
     a: OMatrix<f64, D, D>,
     q0: OVector<f64, D>,
     err: f64,
+    nmax: u32,
 ) -> IterativeResult<(f64, OVector<f64, D>)>
 where
     DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D> + Allocator<f64, Const<1>, D>,
@@ -21,23 +22,26 @@ where
     }
     let mut nu = 0.;
 
-    let mut i = 0;
-    let max_iterations = 10000;
+    let mut n = 0;
 
-    while 3. * current_err.abs() > err.abs() && i < max_iterations {
-        i += 1;
+    while 3. * current_err.abs() > err.abs() && n < nmax {
         z = &a * &z;
         z.normalize_mut();
         nu = (z.transpose() * &a * &z).x;
         let r = &a * &z - nu * &z;
+
         current_err = r.norm() / nu.abs();
+        n += 1;
     }
 
-    if i == max_iterations {
-        return IterativeResult::MaxIterations((nu, z));
+    if n == nmax {
+        IterativeResult::MaxIterations((nu, z))
+    } else {
+        IterativeResult::Converged {
+            result: (nu, z),
+            iterations: n,
+        }
     }
-
-    IterativeResult::Converged((nu, z))
 }
 
 pub fn inverse_power_iteration<D: Dim>(
@@ -45,6 +49,7 @@ pub fn inverse_power_iteration<D: Dim>(
     q0: OVector<f64, D>,
     mu: f64,
     err: f64,
+    nmax: u32,
 ) -> IterativeResult<(f64, OVector<f64, D>)>
 where
     DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D> + Allocator<f64, Const<1>, D>,
@@ -60,11 +65,10 @@ where
         None => return IterativeResult::Failed,
     };
 
-    let mut i = 0;
-    let max_iterations = 10000;
+    let mut n = 0;
 
-    while 3. * current_err.abs() > err.abs() && i < max_iterations {
-        i += 1;
+    while 3. * current_err.abs() > err.abs() && n < nmax {
+        n += 1;
 
         z = match lu.solve(&z) {
             Some(z) => z,
@@ -76,11 +80,14 @@ where
         current_err = r.norm() / sigma.abs();
     }
 
-    if i == max_iterations {
-        return IterativeResult::MaxIterations((sigma, z));
+    if n == nmax {
+        IterativeResult::MaxIterations((sigma, z))
+    } else {
+        IterativeResult::Converged {
+            result: (sigma, z),
+            iterations: n,
+        }
     }
-
-    IterativeResult::Converged((sigma, z))
 }
 
 pub fn qr_algorithm<D: Dim>(a: OMatrix<f64, D, D>, n: usize) -> OVector<f64, D>
@@ -108,7 +115,7 @@ mod tests {
     fn test_power_iteration() {
         let a = OMatrix::<f64, Const<3>, Const<3>>::new(1., 2., 3., 4., 5., 6., 7., 8., 9.);
         let q0 = OVector::<f64, Const<3>>::new(1., 2., 3.);
-        let (nu, _) = power_iteration(a, q0, 0.01).unwrap();
+        let (nu, _) = power_iteration(a, q0, 0.01, 1000).unwrap();
 
         assert_abs_diff_eq!(nu, 16.1168, epsilon = 0.1);
     }
@@ -117,7 +124,7 @@ mod tests {
     fn test_power_iteration_dynamic() {
         let a = DMatrix::from_vec(3, 3, (1..=9).map(|i| i as f64).collect::<Vec<_>>());
         let q0 = DVector::zeros(3);
-        let (nu, _) = power_iteration(a, q0, 0.01).unwrap();
+        let (nu, _) = power_iteration(a, q0, 0.01, 1000).unwrap();
 
         assert_abs_diff_eq!(nu, 16.1168, epsilon = 0.1);
     }
@@ -126,7 +133,7 @@ mod tests {
     fn test_inverse_power_iteration() {
         let a = OMatrix::<f64, Const<3>, Const<3>>::new(1., 2., 3., 4., 5., 6., 7., 8., 9.);
         let q0 = OVector::<f64, Const<3>>::new(1., 2., 3.);
-        let (nu, q) = inverse_power_iteration(a, q0, 15., 1e-6).unwrap();
+        let (nu, q) = inverse_power_iteration(a, q0, 15., 1e-6, 1000).unwrap();
 
         assert_abs_diff_eq!(nu, 16.1168, epsilon = 1e-4);
         assert_abs_diff_eq!(
