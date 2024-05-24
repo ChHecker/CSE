@@ -147,19 +147,29 @@ pub fn conjugate_gradient<D: Dim>(
     nmax: u32,
 ) -> IterativeResult<OVector<f64, D>>
 where
-    DefaultAllocator:
-        Allocator<f64, D, D> + Allocator<f64, D, Const<1>> + Allocator<f64, Const<1>, D>,
+    DefaultAllocator: Allocator<f64, D, D>
+        + Allocator<f64, D, Const<1>>
+        + Allocator<f64, Const<1>, D>
+        + Allocator<f64, Const<1>, Const<1>>,
 {
     let mut n = 0;
     let mut res_norm = epsilon + 1.;
     let mut x = x0;
+    let mut r = b - a * &x;
+    let mut d = r.clone();
 
     while res_norm > epsilon && n < nmax {
-        let res = b - a * &x;
-        let alpha = res.norm_squared() / (res.tr_mul(a) * &res)[0];
-        x += alpha * &res;
+        let r_old = r.clone();
+        let z = a * &d;
 
-        res_norm = res.norm();
+        let alpha = r.norm_squared() / d.tr_mul(&z)[0];
+        x += alpha * &d;
+        r -= alpha * z;
+
+        let beta = r.norm_squared() / r_old.norm_squared();
+        d = &r + beta * &d;
+
+        res_norm = r.norm();
         n += 1;
     }
 
@@ -205,6 +215,32 @@ mod tests {
         let a = random_pos_def_matrix();
         let b: Vector3<f64> = Vector3::new_random();
         let x = gradient(&a, &b, Vector3::zeros(), 1e-6, 100);
+        match x {
+            IterativeResult::Converged {
+                result: _,
+                iterations,
+            } => {
+                dbg!(iterations);
+            }
+            _ => panic!(),
+        }
+        assert!(x.is_converged())
+    }
+
+    #[test]
+    fn test_conjugate_gradient() {
+        let a = random_pos_def_matrix();
+        let b: Vector3<f64> = Vector3::new_random();
+        let x = conjugate_gradient(&a, &b, Vector3::zeros(), 1e-6, 100);
+        match x {
+            IterativeResult::Converged {
+                result: _,
+                iterations,
+            } => {
+                dbg!(iterations);
+            }
+            _ => panic!(),
+        }
         assert!(x.is_converged())
     }
 }
