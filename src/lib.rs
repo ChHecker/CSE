@@ -125,4 +125,11 @@ impl<V> IterativeResult<V> {
             IterativeResult::Failed => false,
         }
     }
+
+    pub fn n_iterations(&self) -> Option<u32> {
+        match self {
+            IterativeResult::Converged { result: _, iterations } => Some(*iterations),
+            IterativeResult::MaxIterations(_) | IterativeResult::Failed => None,
+        }
+    }
 }

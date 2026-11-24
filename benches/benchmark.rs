@@ -1,7 +1,7 @@
 use std::thread;
 use std::time::Duration;
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use cse::interpolation::{AitkenNeville, BarycentricLagrange, CubicSpline, Interpolation, Newton};
 use cse::linalg::exact_solvers::{Lu, Qr};
 use cse::poisson_solvers::{gauss_seidel, jacobi, multigrid, successive_overrelaxation};
@@ -161,20 +161,99 @@ fn poisson_benchmark(c: &mut Criterion) {
     for n in [127, 1023, 8191] {
         let f: DVector<f64> = DVector::new_random(n);
         let u0: DVector<f64> = DVector::new_random(n);
+        let mut workspace: DVector<f64> = DVector::zeros(n);
 
-        group.bench_function(BenchmarkId::new("jacobi", n), |b| {
-            b.iter(|| jacobi(&f, u0.clone(), 1., 1e-5, 100_000))
+        group.bench_with_input(BenchmarkId::new("jacobi", n), &n, |b, _| {
+            b.iter_batched_ref(
+                || u0.clone(),
+                |u0| {
+                    jacobi(
+                        black_box(f.as_slice()),
+                        black_box(u0.as_mut_slice()),
+                        workspace.as_mut_slice(),
+                        1.,
+                        1e-5,
+                        100_000,
+                    )
+                },
+                BatchSize::SmallInput,
+            )
         });
-        group.bench_function(BenchmarkId::new("gauss seidel", n), |b| {
-            b.iter(|| gauss_seidel(&f, u0.clone(), 1., 1e-5, 100_000))
+        group.bench_with_input(BenchmarkId::new("gauss seidel", n), &n, |b, _| {
+            b.iter_batched_ref(
+                || u0.clone(),
+                |u0| {
+                    gauss_seidel(
+                        black_box(f.as_slice()),
+                        black_box(u0.as_mut_slice()),
+                        1.,
+                        1e-5,
+                        100_000,
+                    )
+                },
+                BatchSize::SmallInput,
+            )
         });
-        group.bench_function(BenchmarkId::new("sor", n), |b| {
-            b.iter(|| successive_overrelaxation(&f, u0.clone(), 1., 1.7, 1e-5, 100_000))
+        group.bench_with_input(BenchmarkId::new("sor", n), &n, |b, _| {
+            b.iter_batched_ref(
+                || u0.clone(),
+                |u0| {
+                    successive_overrelaxation(
+                        black_box(f.as_slice()),
+                        black_box(u0.as_mut_slice()),
+                        1.,
+                        1.7,
+                        1e-5,
+                        100_000,
+                    )
+                },
+                BatchSize::SmallInput,
+            )
         });
-        group.bench_function(BenchmarkId::new("multigrid", n), |b| {
-            b.iter(|| multigrid(&f, u0.clone(), 1., 1.7, 1e-5, 100_000, 2))
+        group.bench_with_input(BenchmarkId::new("multigrid", n), &n, |b, _| {
+            b.iter_batched_ref(
+                || u0.clone(),
+                |u0| {
+                    multigrid(
+                        black_box(f.as_slice()),
+                        black_box(u0.as_mut_slice()),
+                        1.,
+                        1.7,
+                        1e-5,
+                        100_000,
+                        2,
+                    )
+                },
+                BatchSize::SmallInput,
+            )
         });
+    }
+}
 
+fn multigrid_benchmark(c: &mut Criterion) {
+    let mut group = c.benchmark_group("multigrid");
+
+    for n in 1..=5 {
+        let f: DVector<f64> = DVector::new_random(4095);
+        let u0: DVector<f64> = DVector::new_random(4095);
+
+        group.bench_with_input(BenchmarkId::new("smoothing", n), &n, |b, _| {
+            b.iter_batched_ref(
+                || u0.clone(),
+                |u0| {
+                    multigrid(
+                        black_box(f.as_slice()),
+                        black_box(u0.as_mut_slice()),
+                        1.,
+                        1.7,
+                        1e-5,
+                        100_000,
+                        2,
+                    )
+                },
+                BatchSize::SmallInput,
+            )
+        });
     }
 }
 
@@ -184,6 +263,7 @@ criterion_group!(
     interpolation_benchmark,
     quadrature_benchmark,
     sort_benchmark,
-    poisson_benchmark
+    poisson_benchmark,
+    multigrid_benchmark
 );
 criterion_main!(benches);
