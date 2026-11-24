@@ -1,14 +1,11 @@
-use nalgebra::{allocator::Allocator, Const, DefaultAllocator, Dim, OVector};
+use nalgebra::DVector;
 
 use crate::IterativeResult;
 
-fn residual<D: Dim>(f: &OVector<f64, D>, u: &OVector<f64, D>, h: f64) -> OVector<f64, D>
-where
-    DefaultAllocator:
-        Allocator<f64, D, D> + Allocator<f64, D, Const<1>> + Allocator<f64, Const<1>, D>,
+fn residual(f: &[f64], u: &[f64], h: f64) -> DVector<f64>
 {
-    let mut res: OVector<f64, D> = OVector::zeros_generic(u.shape_generic().0, Const);
-    residual_into(f.as_slice(), u.as_slice(), h, res.as_mut_slice());
+    let mut res: DVector<f64> = DVector::zeros(u.len());
+    residual_into(f, u, h, res.as_mut_slice());
     res
 }
 
@@ -219,7 +216,6 @@ pub fn multigrid(
     f: &[f64],
     u0: &mut [f64],
     h: f64,
-    omega: f64,
     epsilon: f64,
     nmax: u32,
     nsmoothing: u32,
@@ -233,12 +229,12 @@ pub fn multigrid(
     let mut storage = MgStorage::new(f, u0);
 
     while res > epsilon && n < nmax {
-        storage.multigrid_recursive(h, omega, nsmoothing, 0);
-        res = residual_norm(f, storage.u[0].as_slice(), h);
+        storage.multigrid_recursive(h, nsmoothing, 0);
+        res = residual_norm(f, &storage.u[0], h);
         n += 1;
     }
 
-    u0.copy_from_slice(storage.u[0].as_slice());
+    u0.copy_from_slice(&storage.u[0]);
     if n == nmax {
         IterativeResult::MaxIterations(())
     } else {
@@ -266,7 +262,7 @@ impl MgStorage {
         let workspace = vec![0.; dim];
 
         dim /= 2;
-        while dim > 1 {
+        while dim > 0 {
             u.push(vec![0.; dim]);
             f.push(vec![0.; dim]);
 
@@ -276,7 +272,7 @@ impl MgStorage {
         Self { u, f, workspace }
     }
 
-    fn multigrid_recursive(&mut self, h_fine: f64, omega: f64, nsmoothing: u32, depth: usize) {
+    fn multigrid_recursive(&mut self, h_fine: f64, nsmoothing: u32, depth: usize) {
         let dim_fine = self.u[depth].len();
         let h_coarse = 2. * h_fine;
 
@@ -285,14 +281,6 @@ impl MgStorage {
         assert!(dim_fine % 2 == 1);
         assert_eq!(u.len(), dim_fine);
 
-        // mappings:
-        // GS: f -> u
-        // residual: f, u -> res_fine
-        // restriction: res_fine -> res_coarse
-        // recursion: res_coarse -> err_coarse
-        // prolongation: err_coarse -> err_fine
-        // correction: err_fine -> u
-        // GS: f -> u
         gauss_seidel(&self.f[depth], u, h_fine, 0., nsmoothing).unwrap();
 
         residual_into(&self.f[depth], u, h_fine, &mut self.workspace[..dim_fine]);
@@ -300,18 +288,19 @@ impl MgStorage {
         restriction_into(&self.workspace[..dim_fine], &mut self.f[depth + 1]);
 
         self.u[depth + 1].fill(0.);
-        if dim_fine > 7 {
-            self.multigrid_recursive(h_coarse, omega, nsmoothing, depth + 1);
+        if dim_fine > 3 {
+            self.multigrid_recursive(h_coarse, nsmoothing, depth + 1);
         } else {
-            successive_overrelaxation(
-                &self.f[depth + 1],
-                &mut self.u[depth + 1],
-                h_coarse,
-                omega,
-                1e-12,
-                100,
-            )
-            .unwrap();
+            self.u[depth + 1][0] = h_coarse * h_coarse * self.f[depth + 1][0] / 2.;
+            // successive_overrelaxation(
+            //     &self.f[depth + 1],
+            //     &mut self.u[depth + 1],
+            //     h_coarse,
+            //     omega,
+            //     1e-17,
+            //     100,
+            // )
+            // .unwrap();
         }
 
         prolongation_into(&self.u[depth + 1], &mut self.workspace[..dim_fine]);
@@ -327,7 +316,7 @@ impl MgStorage {
 #[cfg(test)]
 mod tests {
     use approx::assert_abs_diff_eq;
-    use nalgebra::{DVector, SVector};
+    use nalgebra::SVector;
 
     use super::*;
 
@@ -346,7 +335,7 @@ mod tests {
         );
         assert!(x.is_converged());
 
-        let res = residual(&f, &u0, 1.).norm();
+        let res = residual_norm(f.as_slice(), u0.as_slice(), 1.);
         dbg!(res);
 
         assert_abs_diff_eq!(res, 0., epsilon = 1e-3);
@@ -359,7 +348,7 @@ mod tests {
         let x = gauss_seidel(f.as_slice(), u0.as_mut_slice(), 1., 1e-5, 100_000);
         assert!(x.is_converged());
 
-        let res = residual(&f, &u0, 1.).norm();
+        let res = residual_norm(f.as_slice(), u0.as_slice(), 1.);
         dbg!(res);
 
         assert_abs_diff_eq!(res, 0., epsilon = 1e-3);
@@ -372,7 +361,7 @@ mod tests {
         let x = successive_overrelaxation(f.as_slice(), u0.as_mut_slice(), 1., 1.7, 1e-5, 100_000);
         assert!(x.is_converged());
 
-        let res = residual(&f, &u0, 1.).norm();
+        let res = residual_norm(f.as_slice(), u0.as_slice(), 1.);
         dbg!(res);
 
         assert_abs_diff_eq!(res, 0., epsilon = 1e-3);
@@ -380,25 +369,38 @@ mod tests {
 
     #[test]
     fn test_multigrid() {
+        const NMAX: u32 = 10;
+
         // let f: SVector<f64, 127> = SVector::new_random();
         // let u0: SVector<f64, 127> = SVector::new_random();
-        for i in 5..10 {
+        for i in 5..15 {
             let size = 2usize.pow(i) - 1;
+            let h = 1. / (size + 1) as f64;
+            let k = 4.;
+            let pi = std::f64::consts::PI;
 
-            let mut f: DVector<f64> = DVector::zeros(size);
-            for (i, elem) in f.iter_mut().enumerate() {
-                *elem = (4. * i as f64 / size as f64).sin();
+            let mut f = vec![0.; size];
+            let mut u0 = vec![0.; size];
+
+            for (i, fi) in f.iter_mut().enumerate() {
+                let x = (i + 1) as f64 * h;
+                let s = (k * pi * x).sin();
+                *fi = (k * pi).powi(2) * s;
             }
-            let mut u0: DVector<f64> = DVector::zeros(size);
 
-            println!("grid size {size}:");
-            let x = multigrid(f.as_slice(), u0.as_mut_slice(), 1., 1.7, 1e-5, 1000, 2);
+            let x = multigrid(
+                f.as_slice(),
+                u0.as_mut_slice(),
+                h,
+                1e-4,
+                NMAX,
+                3,
+            );
+
+            let res = residual_norm(f.as_slice(), u0.as_slice(), h);
+
             assert!(x.is_converged());
-
-            let res = residual(&f, &u0, 1.).norm();
-            println!("res {res} after {} iterations\n", x.n_iterations().unwrap());
-
-            assert_abs_diff_eq!(res, 0., epsilon = 1e-3);
+            assert_abs_diff_eq!(res, 0., epsilon = 1e-4);
         }
     }
 }
