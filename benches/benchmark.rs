@@ -4,6 +4,7 @@ use std::time::Duration;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use cse::interpolation::{AitkenNeville, BarycentricLagrange, CubicSpline, Interpolation, Newton};
 use cse::linalg::exact_solvers::{Lu, Qr};
+use cse::poisson_solvers::{gauss_seidel, jacobi, multigrid, successive_overrelaxation};
 use cse::quadrature::{adapative_trapezoidal, composite_trapezoidal, romberg, simpson};
 use cse::sorting::{merge_sort, quick_sort, selection_sort};
 use nalgebra::{DVector, SMatrix, SVector};
@@ -154,11 +155,35 @@ fn sort_benchmark(c: &mut Criterion) {
     }
 }
 
+fn poisson_benchmark(c: &mut Criterion) {
+    let mut group = c.benchmark_group("poisson");
+
+    for n in [127, 1023, 8191] {
+        let f: DVector<f64> = DVector::new_random(n);
+        let u0: DVector<f64> = DVector::new_random(n);
+
+        group.bench_function(BenchmarkId::new("jacobi", n), |b| {
+            b.iter(|| jacobi(&f, u0.clone(), 1., 1e-5, 100_000))
+        });
+        group.bench_function(BenchmarkId::new("gauss seidel", n), |b| {
+            b.iter(|| gauss_seidel(&f, u0.clone(), 1., 1e-5, 100_000))
+        });
+        group.bench_function(BenchmarkId::new("sor", n), |b| {
+            b.iter(|| successive_overrelaxation(&f, u0.clone(), 1., 1.7, 1e-5, 100_000))
+        });
+        group.bench_function(BenchmarkId::new("multigrid", n), |b| {
+            b.iter(|| multigrid(&f, u0.clone(), 1., 1.7, 1e-5, 100_000, 2))
+        });
+
+    }
+}
+
 criterion_group!(
     benches,
     linalg_benchmark,
     interpolation_benchmark,
     quadrature_benchmark,
-    sort_benchmark
+    sort_benchmark,
+    poisson_benchmark
 );
 criterion_main!(benches);

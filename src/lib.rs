@@ -10,6 +10,7 @@ pub mod interpolation;
 pub mod least_squares;
 pub mod linalg;
 pub mod ode_solvers;
+pub mod poisson_solvers;
 pub mod quadrature;
 pub mod sorting;
 
@@ -63,6 +64,7 @@ impl<T: RealField + Copy, const D: usize> IntoMatrix<T, D> for OMatrix<T, Const<
     }
 }
 
+#[derive(Debug)]
 pub enum IterativeResult<V> {
     Converged { result: V, iterations: u32 },
     MaxIterations(V),
